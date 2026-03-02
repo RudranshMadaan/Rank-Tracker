@@ -9,13 +9,19 @@ const COUNTRIES = [
   { label: "India", gl: "in", hl: "en" },
 ];
 
-async function fetchHeadings(url) {
+async function fetchHeadings(url, serpTitle) {
+  // Use SerpAPI title as guaranteed H1 fallback
+  const h1Fallback = serpTitle ? [serpTitle] : ["—"];
   try {
-    const res = await fetch(`${SCRAPER}?url=${encodeURIComponent(url)}`);
-    if (!res.ok) return { h1:["—"],h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"] };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+    const res = await fetch(`${SCRAPER}?url=${encodeURIComponent(url)}`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return { h1: h1Fallback, h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"] };
     const data = await res.json();
     return {
-      h1: Array.isArray(data.h1) && data.h1.length ? data.h1 : ["—"],
+      // Use scraped H1 if found, otherwise use SerpAPI title
+      h1: Array.isArray(data.h1) && data.h1.length && data.h1[0] !== "—" ? data.h1 : h1Fallback,
       h2: Array.isArray(data.h2) && data.h2.length ? data.h2 : ["—"],
       h3: Array.isArray(data.h3) && data.h3.length ? data.h3 : ["—"],
       h4: Array.isArray(data.h4) && data.h4.length ? data.h4 : ["—"],
@@ -23,7 +29,7 @@ async function fetchHeadings(url) {
       h6: Array.isArray(data.h6) && data.h6.length ? data.h6 : ["—"],
     };
   } catch {
-    return { h1:["—"],h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"] };
+    return { h1: h1Fallback, h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"] };
   }
 }
 
@@ -84,12 +90,15 @@ export default function App() {
         try { domain = new URL(link).hostname.replace("www.", ""); } catch {}
         return {
           rank: i + 1,
-          h1:["—"],h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"],
+          h1: item.title ? [item.title] : ["—"],
+          h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"],
           headingsLoaded: false,
           site_name: item.source || domain,
           domain: domain || "—",
           url: link,
+          title: item.title || "",
           date: item.date || null,
+          snippet: item.snippet || "",
         };
       });
 
@@ -97,10 +106,10 @@ export default function App() {
       setLoading(false);
       setLoadingHeadings(true);
 
-      // Fetch headings sequentially to avoid overloading
+      // Fetch H2-H6 sequentially, H1 already set from SerpAPI
       const enriched = [...mapped];
       for (let i = 0; i < enriched.length; i++) {
-        const headings = await fetchHeadings(enriched[i].url);
+        const headings = await fetchHeadings(enriched[i].url, enriched[i].title);
         enriched[i] = { ...enriched[i], ...headings, headingsLoaded: true };
         setResults([...enriched]);
       }
@@ -316,6 +325,7 @@ export default function App() {
             serpData={serpData}
             searched={searched}
             loading={loading}
+            rawOrganic={results.map(r => ({ snippet: r.snippet, title: r.title }))}
           />
         )}
 
