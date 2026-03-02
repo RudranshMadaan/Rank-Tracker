@@ -23,7 +23,7 @@ function dedup(arr) {
   return arr.filter(item=>{ const k=item.toLowerCase().trim(); if(seen.has(k))return false; seen.add(k); return true; });
 }
 
-export default function KeywordPanel({ keyword, country, results, serpData, searched, loading }) {
+export default function KeywordPanel({ keyword, country, results, serpData, searched, loading, rawOrganic = [] }) {
   const [keywords, setKeywords] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [copyMsg, setCopyMsg] = useState("");
@@ -45,6 +45,12 @@ export default function KeywordPanel({ keyword, country, results, serpData, sear
         Array.isArray(r[hk]) ? r[hk].filter(h=>h&&h!=="—"&&h!=="...") : []
       )
     ).map(clean).filter(Boolean);
+
+    // Also extract phrases from SerpAPI snippets — works even for JS-rendered sites
+    const snippetPhrases = rawOrganic
+      .map(r => r.snippet || "")
+      .flatMap(s => s.split(/[.!?]+/).map(p => clean(p.trim())))
+      .filter(p => p.length > 4 && p.length < 120 && isContent(p));
 
     const secondary = dedup(
       ((serpData?.related_searches)||[]).map(r=>r.query||"").filter(q=>q&&q.toLowerCase()!==keyword.toLowerCase())
