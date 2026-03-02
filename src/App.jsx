@@ -10,23 +10,21 @@ const COUNTRIES = [
 ];
 
 async function fetchHeadings(url, serpTitle) {
-  // Use SerpAPI title as guaranteed H1 fallback
   const h1Fallback = serpTitle ? [serpTitle] : ["—"];
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+    const timeout = setTimeout(() => controller.abort(), 25000); // 25s timeout
     const res = await fetch(`${SCRAPER}?url=${encodeURIComponent(url)}`, { signal: controller.signal });
     clearTimeout(timeout);
     if (!res.ok) return { h1: h1Fallback, h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"] };
     const data = await res.json();
     return {
-      // Use scraped H1 if found, otherwise use SerpAPI title
       h1: Array.isArray(data.h1) && data.h1.length && data.h1[0] !== "—" ? data.h1 : h1Fallback,
-      h2: Array.isArray(data.h2) && data.h2.length ? data.h2 : ["—"],
-      h3: Array.isArray(data.h3) && data.h3.length ? data.h3 : ["—"],
-      h4: Array.isArray(data.h4) && data.h4.length ? data.h4 : ["—"],
-      h5: Array.isArray(data.h5) && data.h5.length ? data.h5 : ["—"],
-      h6: Array.isArray(data.h6) && data.h6.length ? data.h6 : ["—"],
+      h2: Array.isArray(data.h2) && data.h2.length && data.h2[0] !== "—" ? data.h2 : ["—"],
+      h3: Array.isArray(data.h3) && data.h3.length && data.h3[0] !== "—" ? data.h3 : ["—"],
+      h4: Array.isArray(data.h4) && data.h4.length && data.h4[0] !== "—" ? data.h4 : ["—"],
+      h5: Array.isArray(data.h5) && data.h5.length && data.h5[0] !== "—" ? data.h5 : ["—"],
+      h6: Array.isArray(data.h6) && data.h6.length && data.h6[0] !== "—" ? data.h6 : ["—"],
     };
   } catch {
     return { h1: h1Fallback, h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"] };
@@ -105,6 +103,9 @@ export default function App() {
       setResults(mapped);
       setLoading(false);
       setLoadingHeadings(true);
+
+      // Wake up the scraper server first (Render free tier sleeps)
+      try { await fetch(SCRAPER.replace("/scrape-headings", "/"), { signal: AbortSignal.timeout(30000) }); } catch {}
 
       // Fetch H2-H6 sequentially, H1 already set from SerpAPI
       const enriched = [...mapped];
