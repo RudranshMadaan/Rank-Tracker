@@ -223,13 +223,16 @@ export default function App() {
 
         {/* Tabs */}
         <div style={{ display:"flex", gap:4, marginBottom:20, background:"#1e293b", borderRadius:12, padding:5, border:"1px solid #334155", width:"fit-content" }}>
-          {[["serp","SERP Scraper"],["keywords","Keyword Analysis"]].map(([tab, label]) => (
+          {[["serp","SERP Scraper"],["sponsored","Sponsored"],["keywords","Keyword Analysis"]].map(([tab, label]) => (
             <button key={tab} onClick={()=>setActiveTab(tab)}
               style={{ padding:"9px 24px", borderRadius:9, border:"none", background:activeTab===tab?"linear-gradient(135deg,#6366f1,#8b5cf6)":"transparent", color:activeTab===tab?"#fff":"#64748b", fontWeight:700, fontSize:13, cursor:"pointer", transition:"all 0.2s", letterSpacing:"0.02em" }}>
               {label}
+              {tab==="sponsored" && ads.length>0 && (
+                <span style={{ marginLeft:8, background:"#f59e0b", borderRadius:50, padding:"1px 7px", fontSize:10, color:"#fff", fontWeight:800 }}>{ads.length}</span>
+              )}
               {tab==="keywords" && results.length>0 && (
                 <span style={{ marginLeft:8, background:"#22c55e", borderRadius:50, padding:"1px 7px", fontSize:10, color:"#fff", fontWeight:800 }}>
-                  {activeKeyword?serpData?.related_searches?.length||0:""}
+                  {serpData?.related_searches?.length||0}
                 </span>
               )}
             </button>
@@ -334,6 +337,67 @@ export default function App() {
               </div>
             )}
           </>
+        )}
+
+        {/* Sponsored Tab */}
+        {activeTab==="sponsored" && (
+          <div>
+            {!searched && (
+              <div style={{ textAlign:"center", padding:"60px 20px" }}>
+                <div style={{ fontSize:15, color:"#475569", fontWeight:500 }}>Search a keyword to see sponsored ads</div>
+              </div>
+            )}
+            {searched && ads.length===0 && !loading && (
+              <div style={{ textAlign:"center", padding:"60px 20px" }}>
+                <div style={{ fontSize:15, color:"#475569", fontWeight:500 }}>No sponsored ads found for this keyword</div>
+                <div style={{ fontSize:12, color:"#334155", marginTop:6 }}>Try a more commercial keyword like "buy CRM software" or "best DAM tool"</div>
+              </div>
+            )}
+            {ads.length>0 && (
+              <>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+                  <div style={{ fontSize:13, color:"#64748b" }}>
+                    <span style={{ color:"#f59e0b", fontWeight:700 }}>{ads.length}</span> sponsored ads for <span style={{ color:"#fff", fontWeight:600 }}>"{activeKeyword}"</span>
+                    <span style={{ marginLeft:10, background:"#1c1600", border:"1px solid #f59e0b40", borderRadius:6, padding:"2px 10px", fontSize:11, color:"#f59e0b", fontWeight:600 }}>Pages 1 & 2</span>
+                  </div>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                  {ads.map((ad, i) => (
+                    <div key={i} style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:12, padding:"18px 22px", transition:"background 0.15s" }}
+                      onMouseEnter={e=>e.currentTarget.style.background="#1e3155"}
+                      onMouseLeave={e=>e.currentTarget.style.background="#1e293b"}>
+                      <div style={{ display:"flex", alignItems:"flex-start", gap:16 }}>
+                        {/* Rank */}
+                        <div style={{ width:34, height:34, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", background:"linear-gradient(135deg,#f59e0b,#d97706)", fontWeight:800, fontSize:13, color:"#fff", flexShrink:0 }}>{ad.rank}</div>
+                        <div style={{ flex:1 }}>
+                          {/* Title */}
+                          <a href={ad.url} target="_blank" rel="noopener noreferrer"
+                            style={{ color:"#a5b4fc", fontWeight:700, fontSize:14, textDecoration:"none", display:"block", marginBottom:4 }}
+                            onMouseEnter={e=>e.target.style.color="#c7d2fe"} onMouseLeave={e=>e.target.style.color="#a5b4fc"}>
+                            {ad.title}
+                          </a>
+                          {/* URL */}
+                          <div style={{ fontSize:11, color:"#22c55e", fontFamily:"monospace", marginBottom:6 }}>{ad.displayed_url}</div>
+                          {/* Description */}
+                          <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.6, marginBottom: ad.sitelinks?.length ? 10 : 0 }}>{ad.description}</div>
+                          {/* Sitelinks */}
+                          {ad.sitelinks?.length>0 && (
+                            <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:8 }}>
+                              {ad.sitelinks.map((s,j)=>(
+                                <span key={j} style={{ background:"#0f172a", border:"1px solid #334155", borderRadius:6, padding:"3px 10px", fontSize:11, color:"#64748b" }}>{s}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {/* Domain badge */}
+                        <span style={{ background:"#0a1628", border:"1px solid #1e3a5f", borderRadius:6, padding:"3px 9px", fontSize:11, color:"#7dd3fc", fontFamily:"monospace", flexShrink:0 }}>{ad.domain}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         )}
 
         {/* Keyword Tab */}
