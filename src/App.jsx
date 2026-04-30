@@ -12,10 +12,7 @@ const COUNTRIES = [
 async function fetchHeadings(url, serpTitle) {
   const h1Fallback = serpTitle ? [serpTitle] : ["—"];
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 25000); // 25s timeout
-    const res = await fetch(`${SCRAPER}?url=${encodeURIComponent(url)}`, { signal: controller.signal });
-    clearTimeout(timeout);
+    const res = await fetch(`${SCRAPER}?url=${encodeURIComponent(url)}`);
     if (!res.ok) return { h1: h1Fallback, h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"] };
     const data = await res.json();
     return {
@@ -45,6 +42,7 @@ export default function App() {
   const [activeKeyword, setActiveKeyword] = useState("");
   const [totalResults, setTotalResults] = useState(null);
   const [serpData, setSerpData] = useState(null);
+  const [ads, setAds] = useState([]);
   const [copyMsg, setCopyMsg] = useState("");
 
   const handleSearch = useCallback(async () => {
@@ -54,6 +52,7 @@ export default function App() {
     setSearched(true);
     setResults([]);
     setSerpData(null);
+    setAds([]);
     setTotalResults(null);
     setActiveKeyword(keyword.trim());
     setLoading(true);
@@ -82,6 +81,21 @@ export default function App() {
       if (data1.search_information?.total_results) setTotalResults(data1.search_information.total_results);
       setSerpData({ related_searches: data1.related_searches || [], related_questions: data1.related_questions || [] });
 
+      // Collect sponsored ads from page 1 and page 2
+      const allAds = [
+        ...(data1.ads || []),
+        ...(data2.ads || []),
+      ].map((ad, i) => ({
+        rank: i + 1,
+        title: ad.title || "—",
+        displayed_url: ad.displayed_link || "—",
+        domain: (() => { try { return new URL(ad.link || "").hostname.replace("www.", ""); } catch { return "—"; } })(),
+        description: ad.description || "—",
+        url: ad.link || "",
+        sitelinks: (ad.sitelinks || []).map(s => s.title).filter(Boolean),
+      }));
+      setAds(allAds);
+
       const mapped = finalOrganic.map((item, i) => {
         const link = item.link || "";
         let domain = "";
@@ -104,10 +118,15 @@ export default function App() {
       setLoading(false);
       setLoadingHeadings(true);
 
-      // Wake up the scraper server first (Render free tier sleeps)
-      try { await fetch(SCRAPER.replace("/scrape-headings", "/"), { signal: AbortSignal.timeout(30000) }); } catch {}
+      // Wake up Render server with a simple ping and wait for it
+      try {
+        await fetch(`https://serp-proxy-true.onrender.com/`);
+      } catch {}
 
-      // Fetch H2-H6 sequentially, H1 already set from SerpAPI
+      // Small delay to ensure server is fully awake
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Fetch H2-H6 sequentially
       const enriched = [...mapped];
       for (let i = 0; i < enriched.length; i++) {
         const headings = await fetchHeadings(enriched[i].url, enriched[i].title);
