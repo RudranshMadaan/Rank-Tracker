@@ -13,7 +13,7 @@ async function fetchHeadings(url, serpTitle) {
   const h1Fallback = serpTitle ? [serpTitle] : ["—"];
   try {
     const res = await fetch(`${SCRAPER}?url=${encodeURIComponent(url)}`);
-    if (!res.ok) return { h1: h1Fallback, h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"] };
+    if (!res.ok) return { h1:h1Fallback, h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"] };
     const data = await res.json();
     return {
       h1: Array.isArray(data.h1) && data.h1.length && data.h1[0] !== "—" ? data.h1 : h1Fallback,
@@ -24,7 +24,7 @@ async function fetchHeadings(url, serpTitle) {
       h6: Array.isArray(data.h6) && data.h6.length && data.h6[0] !== "—" ? data.h6 : ["—"],
     };
   } catch {
-    return { h1: h1Fallback, h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"] };
+    return { h1:h1Fallback, h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"] };
   }
 }
 
@@ -35,6 +35,7 @@ export default function App() {
   const [showKey, setShowKey] = useState(false);
   const [country, setCountry] = useState(COUNTRIES[0]);
   const [results, setResults] = useState([]);
+  const [ads, setAds] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingHeadings, setLoadingHeadings] = useState(false);
   const [error, setError] = useState("");
@@ -42,7 +43,6 @@ export default function App() {
   const [activeKeyword, setActiveKeyword] = useState("");
   const [totalResults, setTotalResults] = useState(null);
   const [serpData, setSerpData] = useState(null);
-  const [ads, setAds] = useState([]);
   const [copyMsg, setCopyMsg] = useState("");
 
   const handleSearch = useCallback(async () => {
@@ -51,8 +51,8 @@ export default function App() {
     setError("");
     setSearched(true);
     setResults([]);
-    setSerpData(null);
     setAds([]);
+    setSerpData(null);
     setTotalResults(null);
     setActiveKeyword(keyword.trim());
     setLoading(true);
@@ -81,20 +81,18 @@ export default function App() {
       if (data1.search_information?.total_results) setTotalResults(data1.search_information.total_results);
       setSerpData({ related_searches: data1.related_searches || [], related_questions: data1.related_questions || [] });
 
-  // Collect sponsored ads from page 1 and page 2
-      const allAds = [
-        ...(data1.ads || []),
-        ...(data2.ads || []),
-      ].filter(ad => ad.title && ad.link)
-       .map((ad, i) => ({
-        rank: i + 1,
-        title: ad.title || "—",
-        displayed_url: ad.displayed_link || ad.link || "—",
-        domain: (() => { try { return new URL(ad.link).hostname.replace("www.", ""); } catch { return "—"; } })(),
-        description: ad.description || ad.snippet || "—",
-        url: ad.link || "",
-        sitelinks: (ad.sitelinks || []).map(s => s.title || s.link).filter(Boolean),
-      }));
+      // Collect sponsored ads from page 1 and 2
+      const allAds = [...(data1.ads || []), ...(data2.ads || [])]
+        .filter(ad => ad.title && ad.link)
+        .map((ad, i) => ({
+          rank: i + 1,
+          title: ad.title || "—",
+          displayed_url: ad.displayed_link || ad.link || "—",
+          domain: (() => { try { return new URL(ad.link).hostname.replace("www.", ""); } catch { return "—"; } })(),
+          description: ad.description || ad.snippet || "—",
+          url: ad.link || "",
+          sitelinks: (ad.sitelinks || []).map(s => s.title || s.link).filter(Boolean),
+        }));
       setAds(allAds);
 
       const mapped = finalOrganic.map((item, i) => {
@@ -104,7 +102,7 @@ export default function App() {
         return {
           rank: i + 1,
           h1: item.title ? [item.title] : ["—"],
-          h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"],
+          h2:["—"], h3:["—"], h4:["—"], h5:["—"], h6:["—"],
           headingsLoaded: false,
           site_name: item.source || domain,
           domain: domain || "—",
@@ -119,15 +117,10 @@ export default function App() {
       setLoading(false);
       setLoadingHeadings(true);
 
-      // Wake up Render server with a simple ping and wait for it
-      try {
-        await fetch(`https://serp-proxy-true.onrender.com/`);
-      } catch {}
+      // Wake up scraper then fetch headings sequentially
+      try { await fetch(`https://serp-proxy-true.onrender.com/`); } catch {}
+      await new Promise(r => setTimeout(r, 2000));
 
-      // Small delay to ensure server is fully awake
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Fetch H2-H6 sequentially
       const enriched = [...mapped];
       for (let i = 0; i < enriched.length; i++) {
         const headings = await fetchHeadings(enriched[i].url, enriched[i].title);
@@ -164,7 +157,7 @@ export default function App() {
 
   const downloadCSV = () => {
     if (!results.length) return;
-    const blob = new Blob([getCSVContent()], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob([getCSVContent()], { type:"text/csv;charset=utf-8;" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `serp-${activeKeyword.replace(/\s+/g,"-")}-${country.label}.csv`;
@@ -177,6 +170,7 @@ export default function App() {
     setCopyMsg("Copied!"); setTimeout(() => setCopyMsg(""), 2000);
   };
 
+  // Ahrefs-style heading renderer
   const headColor = { h1:"#a5b4fc", h2:"#67e8f9", h3:"#86efac", h4:"#fde68a", h5:"#f9a8d4", h6:"#c4b5fd" };
   const headIndent = { h1:0, h2:16, h3:32, h4:48, h5:60, h6:72 };
 
@@ -184,13 +178,11 @@ export default function App() {
     if (!r.headingsLoaded) return <span style={{ color:"#334155", fontStyle:"italic", fontSize:12 }}>Loading...</span>;
     const rows = [];
     ["h1","h2","h3","h4","h5","h6"].forEach(hk => {
-      const items = r[hk] || [];
-      if (items.every(v => v === "—")) return;
+      const items = (r[hk] || []).filter(v => v && v !== "—");
       items.forEach((txt, idx) => {
-        if (txt === "—") return;
         rows.push(
           <div key={`${hk}-${idx}`} style={{ display:"flex", alignItems:"baseline", gap:6, marginBottom:4, paddingLeft: headIndent[hk] }}>
-            <span style={{ fontSize:9, fontWeight:800, color: headColor[hk], background:`${headColor[hk]}18`, border:`1px solid ${headColor[hk]}40`, borderRadius:4, padding:"1px 5px", flexShrink:0, letterSpacing:"0.05em" }}>{hk.toUpperCase()}</span>
+            <span style={{ fontSize:9, fontWeight:800, color:headColor[hk], background:`${headColor[hk]}18`, border:`1px solid ${headColor[hk]}40`, borderRadius:4, padding:"1px 5px", flexShrink:0, letterSpacing:"0.05em" }}>{hk.toUpperCase()}</span>
             <span style={{ fontSize:12, color:"#cbd5e1", lineHeight:1.5 }}>{txt}</span>
           </div>
         );
@@ -198,6 +190,10 @@ export default function App() {
     });
     return rows.length > 0 ? rows : <span style={{ color:"#334155" }}>—</span>;
   };
+
+  const rankBg = n => n <= 3 ? "linear-gradient(135deg,#6366f1,#8b5cf6)" : n <= 6 ? "linear-gradient(135deg,#0ea5e9,#2563eb)" : "#1e293b";
+  const cell = { padding:"10px 14px", fontSize:12, color:"#94a3b8", borderRight:"1px solid #1a2540", wordBreak:"break-word", lineHeight:1.5, verticalAlign:"top" };
+  const head = { padding:"10px 14px", fontSize:10, fontWeight:800, color:"#3b5068", textTransform:"uppercase", letterSpacing:"0.08em", borderRight:"1px solid #1a2540", background:"#080e1a", textAlign:"left" };
 
   return (
     <div style={{ minHeight:"100vh", background:"#0f1117", color:"#e2e8f0", fontFamily:"'Inter',sans-serif", padding:"28px 16px" }}>
@@ -249,16 +245,10 @@ export default function App() {
         <div style={{ display:"flex", gap:4, marginBottom:20, background:"#1e293b", borderRadius:12, padding:5, border:"1px solid #334155", width:"fit-content" }}>
           {[["serp","SERP Scraper"],["sponsored","Sponsored"],["keywords","Keyword Analysis"]].map(([tab, label]) => (
             <button key={tab} onClick={()=>setActiveTab(tab)}
-              style={{ padding:"9px 24px", borderRadius:9, border:"none", background:activeTab===tab?"linear-gradient(135deg,#6366f1,#8b5cf6)":"transparent", color:activeTab===tab?"#fff":"#64748b", fontWeight:700, fontSize:13, cursor:"pointer", transition:"all 0.2s", letterSpacing:"0.02em" }}>
+              style={{ padding:"9px 24px", borderRadius:9, border:"none", background:activeTab===tab?"linear-gradient(135deg,#6366f1,#8b5cf6)":"transparent", color:activeTab===tab?"#fff":"#64748b", fontWeight:700, fontSize:13, cursor:"pointer", transition:"all 0.2s" }}>
               {label}
-              {tab==="sponsored" && ads.length>0 && (
-                <span style={{ marginLeft:8, background:"#f59e0b", borderRadius:50, padding:"1px 7px", fontSize:10, color:"#fff", fontWeight:800 }}>{ads.length}</span>
-              )}
-              {tab==="keywords" && results.length>0 && (
-                <span style={{ marginLeft:8, background:"#22c55e", borderRadius:50, padding:"1px 7px", fontSize:10, color:"#fff", fontWeight:800 }}>
-                  {serpData?.related_searches?.length||0}
-                </span>
-              )}
+              {tab==="sponsored" && ads.length>0 && <span style={{ marginLeft:8, background:"#f59e0b", borderRadius:50, padding:"1px 7px", fontSize:10, color:"#fff", fontWeight:800 }}>{ads.length}</span>}
+              {tab==="keywords" && results.length>0 && <span style={{ marginLeft:8, background:"#22c55e", borderRadius:50, padding:"1px 7px", fontSize:10, color:"#fff", fontWeight:800 }}>{serpData?.related_searches?.length||0}</span>}
             </button>
           ))}
         </div>
@@ -288,9 +278,7 @@ export default function App() {
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
                   <div style={{ fontSize:13, color:"#64748b", display:"flex", alignItems:"center", gap:10 }}>
                     <span>Top <span style={{ color:"#a5b4fc", fontWeight:700 }}>{results.length}</span> for <span style={{ color:"#fff", fontWeight:600 }}>"{activeKeyword}"</span></span>
-                    <span style={{ background:country.gl==="us"?"#1e3a5f":"#1a2e1a", border:`1px solid ${country.gl==="us"?"#2563eb":"#22c55e"}`, borderRadius:6, padding:"2px 10px", fontSize:11, color:country.gl==="us"?"#7dd3fc":"#86efac", fontWeight:600 }}>
-                      {country.label}
-                    </span>
+                    <span style={{ background:country.gl==="us"?"#1e3a5f":"#1a2e1a", border:`1px solid ${country.gl==="us"?"#2563eb":"#22c55e"}`, borderRadius:6, padding:"2px 10px", fontSize:11, color:country.gl==="us"?"#7dd3fc":"#86efac", fontWeight:600 }}>{country.label}</span>
                     {loadingHeadings && <span style={{ fontSize:11, color:"#f59e0b", background:"#1c1a0a", border:"1px solid #f59e0b40", borderRadius:6, padding:"2px 10px" }}>Loading H1–H6...</span>}
                     {totalResults && <span style={{ color:"#334155", fontSize:12 }}>~{Number(totalResults).toLocaleString()} results</span>}
                   </div>
@@ -367,37 +355,32 @@ export default function App() {
             {searched && ads.length===0 && !loading && (
               <div style={{ textAlign:"center", padding:"60px 20px" }}>
                 <div style={{ fontSize:15, color:"#475569", fontWeight:500 }}>No sponsored ads found for this keyword</div>
-                <div style={{ fontSize:12, color:"#334155", marginTop:6 }}>Try a more commercial keyword like "buy CRM software" or "best DAM tool"</div>
+                <div style={{ fontSize:12, color:"#334155", marginTop:6 }}>Try a more commercial keyword like "buy CRM software"</div>
               </div>
             )}
             {ads.length>0 && (
               <>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-                  <div style={{ fontSize:13, color:"#64748b" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
+                  <span style={{ fontSize:13, color:"#64748b" }}>
                     <span style={{ color:"#f59e0b", fontWeight:700 }}>{ads.length}</span> sponsored ads for <span style={{ color:"#fff", fontWeight:600 }}>"{activeKeyword}"</span>
-                    <span style={{ marginLeft:10, background:"#1c1600", border:"1px solid #f59e0b40", borderRadius:6, padding:"2px 10px", fontSize:11, color:"#f59e0b", fontWeight:600 }}>Pages 1 & 2</span>
-                  </div>
+                  </span>
+                  <span style={{ background:"#1c1600", border:"1px solid #f59e0b40", borderRadius:6, padding:"2px 10px", fontSize:11, color:"#f59e0b", fontWeight:600 }}>Pages 1 & 2</span>
                 </div>
-                <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-                  {ads.map((ad, i) => (
-                    <div key={i} style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:12, padding:"18px 22px", transition:"background 0.15s" }}
+                <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                  {ads.map((ad,i)=>(
+                    <div key={i} style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:12, padding:"16px 20px" }}
                       onMouseEnter={e=>e.currentTarget.style.background="#1e3155"}
                       onMouseLeave={e=>e.currentTarget.style.background="#1e293b"}>
-                      <div style={{ display:"flex", alignItems:"flex-start", gap:16 }}>
-                        {/* Rank */}
-                        <div style={{ width:34, height:34, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", background:"linear-gradient(135deg,#f59e0b,#d97706)", fontWeight:800, fontSize:13, color:"#fff", flexShrink:0 }}>{ad.rank}</div>
+                      <div style={{ display:"flex", alignItems:"flex-start", gap:14 }}>
+                        <div style={{ width:32, height:32, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", background:"linear-gradient(135deg,#f59e0b,#d97706)", fontWeight:800, fontSize:13, color:"#fff", flexShrink:0 }}>{ad.rank}</div>
                         <div style={{ flex:1 }}>
-                          {/* Title */}
                           <a href={ad.url} target="_blank" rel="noopener noreferrer"
-                            style={{ color:"#a5b4fc", fontWeight:700, fontSize:14, textDecoration:"none", display:"block", marginBottom:4 }}
+                            style={{ color:"#a5b4fc", fontWeight:700, fontSize:14, textDecoration:"none", display:"block", marginBottom:3 }}
                             onMouseEnter={e=>e.target.style.color="#c7d2fe"} onMouseLeave={e=>e.target.style.color="#a5b4fc"}>
                             {ad.title}
                           </a>
-                          {/* URL */}
-                          <div style={{ fontSize:11, color:"#22c55e", fontFamily:"monospace", marginBottom:6 }}>{ad.displayed_url}</div>
-                          {/* Description */}
-                          <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.6, marginBottom: ad.sitelinks?.length ? 10 : 0 }}>{ad.description}</div>
-                          {/* Sitelinks */}
+                          <div style={{ fontSize:11, color:"#22c55e", fontFamily:"monospace", marginBottom:5 }}>{ad.displayed_url}</div>
+                          <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.6 }}>{ad.description}</div>
                           {ad.sitelinks?.length>0 && (
                             <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:8 }}>
                               {ad.sitelinks.map((s,j)=>(
@@ -406,7 +389,6 @@ export default function App() {
                             </div>
                           )}
                         </div>
-                        {/* Domain badge */}
                         <span style={{ background:"#0a1628", border:"1px solid #1e3a5f", borderRadius:6, padding:"3px 9px", fontSize:11, color:"#7dd3fc", fontFamily:"monospace", flexShrink:0 }}>{ad.domain}</span>
                       </div>
                     </div>
@@ -426,7 +408,7 @@ export default function App() {
             serpData={serpData}
             searched={searched}
             loading={loading}
-            rawOrganic={results.map(r => ({ snippet: r.snippet, title: r.title }))}
+            rawOrganic={results.map(r=>({ snippet:r.snippet, title:r.title }))}
           />
         )}
 
