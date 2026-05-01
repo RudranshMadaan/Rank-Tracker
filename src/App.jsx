@@ -81,18 +81,19 @@ export default function App() {
       if (data1.search_information?.total_results) setTotalResults(data1.search_information.total_results);
       setSerpData({ related_searches: data1.related_searches || [], related_questions: data1.related_questions || [] });
 
-      // Collect sponsored ads from page 1 and page 2
+  // Collect sponsored ads from page 1 and page 2
       const allAds = [
         ...(data1.ads || []),
         ...(data2.ads || []),
-      ].map((ad, i) => ({
+      ].filter(ad => ad.title && ad.link)
+       .map((ad, i) => ({
         rank: i + 1,
         title: ad.title || "—",
-        displayed_url: ad.displayed_link || "—",
-        domain: (() => { try { return new URL(ad.link || "").hostname.replace("www.", ""); } catch { return "—"; } })(),
-        description: ad.description || "—",
+        displayed_url: ad.displayed_link || ad.link || "—",
+        domain: (() => { try { return new URL(ad.link).hostname.replace("www.", ""); } catch { return "—"; } })(),
+        description: ad.description || ad.snippet || "—",
         url: ad.link || "",
-        sitelinks: (ad.sitelinks || []).map(s => s.title).filter(Boolean),
+        sitelinks: (ad.sitelinks || []).map(s => s.title || s.link).filter(Boolean),
       }));
       setAds(allAds);
 
@@ -148,8 +149,13 @@ export default function App() {
     const headers = ["Rank","Site Name","Domain","H1","H2","H3","H4","H5","H6","URL"];
     const rows = results.map(r =>
       [r.rank, r.site_name, r.domain,
-        (r.h1||[]).join(" | "),(r.h2||[]).join(" | "),(r.h3||[]).join(" | "),
-        (r.h4||[]).join(" | "),(r.h5||[]).join(" | "),(r.h6||[]).join(" | "),r.url]
+        (r.h1||[]).filter(v=>v!=="—").join(" | "),
+        (r.h2||[]).filter(v=>v!=="—").join(" | "),
+        (r.h3||[]).filter(v=>v!=="—").join(" | "),
+        (r.h4||[]).filter(v=>v!=="—").join(" | "),
+        (r.h5||[]).filter(v=>v!=="—").join(" | "),
+        (r.h6||[]).filter(v=>v!=="—").join(" | "),
+        r.url]
         .map(v => `"${String(v).replace(/"/g,'""')}"`)
         .join(",")
     );
@@ -171,9 +177,27 @@ export default function App() {
     setCopyMsg("Copied!"); setTimeout(() => setCopyMsg(""), 2000);
   };
 
-  const rankBg = n => n <= 3 ? "linear-gradient(135deg,#6366f1,#8b5cf6)" : n <= 6 ? "linear-gradient(135deg,#0ea5e9,#2563eb)" : "#1e293b";
-  const cell = { padding:"10px 14px", fontSize:12, color:"#94a3b8", borderRight:"1px solid #1a2540", wordBreak:"break-word", lineHeight:1.5 };
-  const head = { padding:"10px 14px", fontSize:10, fontWeight:800, color:"#3b5068", textTransform:"uppercase", letterSpacing:"0.08em", borderRight:"1px solid #1a2540", background:"#080e1a", textAlign:"left" };
+  const headColor = { h1:"#a5b4fc", h2:"#67e8f9", h3:"#86efac", h4:"#fde68a", h5:"#f9a8d4", h6:"#c4b5fd" };
+  const headIndent = { h1:0, h2:16, h3:32, h4:48, h5:60, h6:72 };
+
+  const renderHeadings = (r) => {
+    if (!r.headingsLoaded) return <span style={{ color:"#334155", fontStyle:"italic", fontSize:12 }}>Loading...</span>;
+    const rows = [];
+    ["h1","h2","h3","h4","h5","h6"].forEach(hk => {
+      const items = r[hk] || [];
+      if (items.every(v => v === "—")) return;
+      items.forEach((txt, idx) => {
+        if (txt === "—") return;
+        rows.push(
+          <div key={`${hk}-${idx}`} style={{ display:"flex", alignItems:"baseline", gap:6, marginBottom:4, paddingLeft: headIndent[hk] }}>
+            <span style={{ fontSize:9, fontWeight:800, color: headColor[hk], background:`${headColor[hk]}18`, border:`1px solid ${headColor[hk]}40`, borderRadius:4, padding:"1px 5px", flexShrink:0, letterSpacing:"0.05em" }}>{hk.toUpperCase()}</span>
+            <span style={{ fontSize:12, color:"#cbd5e1", lineHeight:1.5 }}>{txt}</span>
+          </div>
+        );
+      });
+    });
+    return rows.length > 0 ? rows : <span style={{ color:"#334155" }}>—</span>;
+  };
 
   return (
     <div style={{ minHeight:"100vh", background:"#0f1117", color:"#e2e8f0", fontFamily:"'Inter',sans-serif", padding:"28px 16px" }}>
@@ -279,19 +303,24 @@ export default function App() {
                 </div>
 
                 <div style={{ overflowX:"auto", borderRadius:14, border:"1px solid #1e293b", boxShadow:"0 8px 32px rgba(0,0,0,0.4)" }}>
-                  <table style={{ width:"100%", borderCollapse:"collapse", minWidth:1100 }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", minWidth:700 }}>
                     <thead>
-                      <tr>{["Rank","Site Name","Domain","H1","H2","H3","H4","H5","H6"].map(h=><th key={h} style={head}>{h}</th>)}</tr>
+                      <tr>
+                        <th style={{ ...head, width:56 }}>Rank</th>
+                        <th style={{ ...head, minWidth:140 }}>Site Name</th>
+                        <th style={{ ...head, minWidth:130 }}>Domain</th>
+                        <th style={{ ...head }}>Heading Structure</th>
+                      </tr>
                     </thead>
                     <tbody>
                       {results.map((r,i)=>(
                         <tr key={i} style={{ background:i%2===0?"#1e293b":"#18223a", transition:"background 0.15s" }}
                           onMouseEnter={e=>e.currentTarget.style.background="#1e3155"}
                           onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"#1e293b":"#18223a"}>
-                          <td style={{ ...cell, width:60, textAlign:"center" }}>
+                          <td style={{ ...cell, textAlign:"center", width:56 }}>
                             <div style={{ width:36, height:36, borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center", background:rankBg(r.rank), fontWeight:800, fontSize:14, color:"#fff", margin:"0 auto", boxShadow:r.rank<=3?"0 2px 10px rgba(99,102,241,0.4)":"none" }}>{r.rank}</div>
                           </td>
-                          <td style={{ ...cell, fontWeight:600, color:"#cbd5e1", minWidth:120 }}>
+                          <td style={{ ...cell, fontWeight:600, color:"#cbd5e1", minWidth:140 }}>
                             <a href={r.url} target="_blank" rel="noopener noreferrer" style={{ color:"#cbd5e1", textDecoration:"none" }}
                               onMouseEnter={e=>e.target.style.color="#a5b4fc"} onMouseLeave={e=>e.target.style.color="#cbd5e1"}>{r.site_name}</a>
                             {r.date&&<div style={{ fontSize:10, color:"#3b5068", marginTop:3 }}>{r.date}</div>}
@@ -299,21 +328,9 @@ export default function App() {
                           <td style={{ ...cell, minWidth:130 }}>
                             <span style={{ background:"#0a1628", border:"1px solid #1e3a5f", borderRadius:6, padding:"3px 9px", fontSize:11, color:"#7dd3fc", fontFamily:"monospace" }}>{r.domain}</span>
                           </td>
-                          {["h1","h2","h3","h4","h5","h6"].map((hk,hi)=>(
-                            <td key={hk} style={{ ...cell, minWidth:180, verticalAlign:"top" }}>
-                              {!r.headingsLoaded
-                                ?<span style={{ color:"#334155", fontStyle:"italic" }}>Loading...</span>
-                                :(r[hk]||["—"]).every(v=>v==="—")
-                                  ?<span style={{ color:"#334155" }}>—</span>
-                                  :(r[hk]||[]).map((txt,idx)=>(
-                                    <div key={idx} style={{ display:"flex", gap:6, marginBottom:idx<(r[hk]||[]).length-1?5:0 }}>
-                                      {(r[hk]||[]).length>1&&<span style={{ color:"#334155", fontSize:10, fontWeight:700, minWidth:14, paddingTop:1 }}>{idx+1}.</span>}
-                                      <span style={{ color:hi===0?"#e2e8f0":"#94a3b8", fontSize:12, lineHeight:1.5 }}>{txt}</span>
-                                    </div>
-                                  ))
-                              }
-                            </td>
-                          ))}
+                          <td style={{ ...cell, minWidth:300 }}>
+                            {renderHeadings(r)}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
