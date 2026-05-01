@@ -1,34 +1,43 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import KeywordPanel from "./KeywordPanel";
 
 const PROXY = process.env.REACT_APP_PROXY_URL || "https://serp-proxy-true.onrender.com/serp";
 const SCRAPER = process.env.REACT_APP_SCRAPER_URL || "https://serp-proxy-true.onrender.com/scrape-headings";
-
-const COUNTRIES = [
-  { label: "USA", gl: "us", hl: "en" },
-  { label: "India", gl: "in", hl: "en" },
-];
+const COUNTRIES = [{ label:"USA", gl:"us", hl:"en" }, { label:"India", gl:"in", hl:"en" }];
 
 async function fetchHeadings(url, serpTitle) {
-  const h1Fallback = serpTitle ? [serpTitle] : ["—"];
+  const fallback = serpTitle ? [serpTitle] : ["—"];
   try {
     const res = await fetch(`${SCRAPER}?url=${encodeURIComponent(url)}`);
-    if (!res.ok) return { h1:h1Fallback, h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"] };
-    const data = await res.json();
-    return {
-      h1: Array.isArray(data.h1) && data.h1.length && data.h1[0] !== "—" ? data.h1 : h1Fallback,
-      h2: Array.isArray(data.h2) && data.h2.length && data.h2[0] !== "—" ? data.h2 : ["—"],
-      h3: Array.isArray(data.h3) && data.h3.length && data.h3[0] !== "—" ? data.h3 : ["—"],
-      h4: Array.isArray(data.h4) && data.h4.length && data.h4[0] !== "—" ? data.h4 : ["—"],
-      h5: Array.isArray(data.h5) && data.h5.length && data.h5[0] !== "—" ? data.h5 : ["—"],
-      h6: Array.isArray(data.h6) && data.h6.length && data.h6[0] !== "—" ? data.h6 : ["—"],
-    };
-  } catch {
-    return { h1:h1Fallback, h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"] };
-  }
+    if (!res.ok) return { h1:fallback, h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"] };
+    const d = await res.json();
+    const pick = (arr, fb) => Array.isArray(arr) && arr.length && arr[0] !== "—" ? arr : fb;
+    return { h1:pick(d.h1,fallback), h2:pick(d.h2,["—"]), h3:pick(d.h3,["—"]), h4:pick(d.h4,["—"]), h5:pick(d.h5,["—"]), h6:pick(d.h6,["—"]) };
+  } catch { return { h1:fallback, h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"] }; }
 }
 
+const DARK = {
+  bg:"#14111f", surface:"#1d1a2e", surface2:"#252238", surface3:"#2c2844",
+  border:"#2e2b42", borderLight:"#3a3655",
+  text:"#ede8de", textSub:"#8a8499", textMuted:"#4e4a60",
+  accent:"#c9a96e", accentSub:"#9b8afb", accentGreen:"#5dcfaa",
+  accentBlue:"#60c4f8", rankTop:"linear-gradient(135deg,#9b8afb,#c084fc)",
+  rankMid:"linear-gradient(135deg,#60c4f8,#3b9fe0)", adGold:"linear-gradient(135deg,#c9a96e,#a07840)",
+  shadow:"rgba(0,0,0,0.4)", shadowSm:"rgba(0,0,0,0.2)",
+};
+const LIGHT = {
+  bg:"#f4efe6", surface:"#fffcf5", surface2:"#ede8dc", surface3:"#e4ddd0",
+  border:"#d8d0be", borderLight:"#c8bfaa",
+  text:"#1a1528", textSub:"#6b6278", textMuted:"#a09898",
+  accent:"#8b6010", accentSub:"#5b4db0", accentGreen:"#1a7a58",
+  accentBlue:"#1a6090", rankTop:"linear-gradient(135deg,#5b4db0,#7c3aed)",
+  rankMid:"linear-gradient(135deg,#1a6090,#2563eb)", adGold:"linear-gradient(135deg,#8b6010,#a07840)",
+  shadow:"rgba(0,0,0,0.1)", shadowSm:"rgba(0,0,0,0.05)",
+};
+
 export default function App() {
+  const [dark, setDark] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("serp");
   const [keyword, setKeyword] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -45,92 +54,64 @@ export default function App() {
   const [serpData, setSerpData] = useState(null);
   const [copyMsg, setCopyMsg] = useState("");
 
+  const T = dark ? DARK : LIGHT;
+
+  useEffect(() => {
+    const handler = (e) => { if (settingsOpen && !e.target.closest("[data-settings]")) setSettingsOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [settingsOpen]);
+
   const handleSearch = useCallback(async () => {
     if (!keyword.trim()) return setError("Please enter a keyword.");
     if (!apiKey.trim()) return setError("Please enter your SerpAPI key.");
-    setError("");
-    setSearched(true);
-    setResults([]);
-    setAds([]);
-    setSerpData(null);
-    setTotalResults(null);
-    setActiveKeyword(keyword.trim());
-    setLoading(true);
-    setLoadingHeadings(false);
-
+    setError(""); setSearched(true); setResults([]); setAds([]); setSerpData(null);
+    setTotalResults(null); setActiveKeyword(keyword.trim()); setLoading(true); setLoadingHeadings(false);
     try {
-      const [res1, res2] = await Promise.all([
+      const [r1, r2] = await Promise.all([
         fetch(`${PROXY}?q=${encodeURIComponent(keyword.trim())}&api_key=${encodeURIComponent(apiKey.trim())}&start=0&num=10&hl=${country.hl}&gl=${country.gl}`),
         fetch(`${PROXY}?q=${encodeURIComponent(keyword.trim())}&api_key=${encodeURIComponent(apiKey.trim())}&start=10&num=10&hl=${country.hl}&gl=${country.gl}`),
       ]);
-      if (!res1.ok) throw new Error(`Server error: ${res1.status}`);
-      const [data1, data2] = await Promise.all([res1.json(), res2.json()]);
-      if (data1.error) throw new Error(data1.error);
-
-      let organic = [...(data1.organic_results || []), ...(data2.organic_results || [])];
+      if (!r1.ok) throw new Error(`Server error: ${r1.status}`);
+      const [d1, d2] = await Promise.all([r1.json(), r2.json()]);
+      if (d1.error) throw new Error(d1.error);
+      let organic = [...(d1.organic_results||[]), ...(d2.organic_results||[])];
       if (organic.length < 12) {
         try {
-          const res3 = await fetch(`${PROXY}?q=${encodeURIComponent(keyword.trim())}&api_key=${encodeURIComponent(apiKey.trim())}&start=20&num=10&hl=${country.hl}&gl=${country.gl}`);
-          const data3 = await res3.json();
-          organic.push(...(data3.organic_results || []));
+          const r3 = await fetch(`${PROXY}?q=${encodeURIComponent(keyword.trim())}&api_key=${encodeURIComponent(apiKey.trim())}&start=20&num=10&hl=${country.hl}&gl=${country.gl}`);
+          const d3 = await r3.json();
+          organic.push(...(d3.organic_results||[]));
         } catch {}
       }
-      const finalOrganic = organic.slice(0, 12);
+      const finalOrganic = organic.slice(0,12);
       if (!finalOrganic.length) throw new Error("No organic results found.");
-
-      if (data1.search_information?.total_results) setTotalResults(data1.search_information.total_results);
-      setSerpData({ related_searches: data1.related_searches || [], related_questions: data1.related_questions || [] });
-
-      // Collect sponsored ads from page 1 and 2
-      const allAds = [...(data1.ads || []), ...(data2.ads || [])]
-        .filter(ad => ad.title && ad.link)
-        .map((ad, i) => ({
-          rank: i + 1,
-          title: ad.title || "—",
-          displayed_url: ad.displayed_link || ad.link || "—",
-          domain: (() => { try { return new URL(ad.link).hostname.replace("www.", ""); } catch { return "—"; } })(),
-          description: ad.description || ad.snippet || "—",
-          url: ad.link || "",
-          sitelinks: (ad.sitelinks || []).map(s => s.title || s.link).filter(Boolean),
-        }));
-      setAds(allAds);
-
-      const mapped = finalOrganic.map((item, i) => {
-        const link = item.link || "";
-        let domain = "";
-        try { domain = new URL(link).hostname.replace("www.", ""); } catch {}
-        return {
-          rank: i + 1,
-          h1: item.title ? [item.title] : ["—"],
-          h2:["—"], h3:["—"], h4:["—"], h5:["—"], h6:["—"],
-          headingsLoaded: false,
-          site_name: item.source || domain,
-          domain: domain || "—",
-          url: link,
-          title: item.title || "",
-          date: item.date || null,
-          snippet: item.snippet || "",
-        };
+      if (d1.search_information?.total_results) setTotalResults(d1.search_information.total_results);
+      setSerpData({ related_searches: d1.related_searches||[], related_questions: d1.related_questions||[] });
+      setAds([...(d1.ads||[]), ...(d2.ads||[])].filter(a=>a.title&&a.link).map((a,i)=>({
+        rank:i+1, title:a.title, displayed_url:a.displayed_link||a.link,
+        domain:(()=>{ try { return new URL(a.link).hostname.replace("www.",""); } catch { return "—"; }})(),
+        description:a.description||a.snippet||"—", url:a.link,
+        sitelinks:(a.sitelinks||[]).map(s=>s.title||s.link).filter(Boolean),
+      })));
+      const mapped = finalOrganic.map((item,i) => {
+        const link = item.link||""; let domain="";
+        try { domain = new URL(link).hostname.replace("www.",""); } catch {}
+        return { rank:i+1, h1:item.title?[item.title]:["—"], h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"],
+          headingsLoaded:false, site_name:item.source||domain, domain:domain||"—",
+          url:link, title:item.title||"", date:item.date||null, snippet:item.snippet||"" };
       });
-
-      setResults(mapped);
-      setLoading(false);
-      setLoadingHeadings(true);
-
-      // Wake up scraper then fetch headings sequentially
+      setResults(mapped); setLoading(false); setLoadingHeadings(true);
       try { await fetch(`https://serp-proxy-true.onrender.com/`); } catch {}
-      await new Promise(r => setTimeout(r, 2000));
-
+      await new Promise(r=>setTimeout(r,2000));
       const enriched = [...mapped];
-      for (let i = 0; i < enriched.length; i++) {
-        const headings = await fetchHeadings(enriched[i].url, enriched[i].title);
-        enriched[i] = { ...enriched[i], ...headings, headingsLoaded: true };
+      for (let i=0; i<enriched.length; i++) {
+        const h = await fetchHeadings(enriched[i].url, enriched[i].title);
+        enriched[i] = { ...enriched[i], ...h, headingsLoaded:true };
         setResults([...enriched]);
       }
       setLoadingHeadings(false);
-    } catch (e) {
-      setLoading(false);
-      setLoadingHeadings(false);
+    } catch(e) {
+      setLoading(false); setLoadingHeadings(false);
       if (e.message?.includes("Invalid API key")) setError("Invalid SerpAPI key.");
       else if (e.message?.includes("Monthly Searches Exceeded")) setError("SerpAPI monthly limit exceeded.");
       else if (e.message?.includes("Failed to fetch")) setError("Cannot reach proxy server.");
@@ -138,204 +119,268 @@ export default function App() {
     }
   }, [keyword, apiKey, country]);
 
-  const getCSVContent = () => {
-    const headers = ["Rank","Site Name","Domain","H1","H2","H3","H4","H5","H6","URL"];
+  const getCSV = () => {
+    const h = ["Rank","Site Name","Domain","H1","H2","H3","H4","H5","H6","URL"];
     const rows = results.map(r =>
-      [r.rank, r.site_name, r.domain,
-        (r.h1||[]).filter(v=>v!=="—").join(" | "),
-        (r.h2||[]).filter(v=>v!=="—").join(" | "),
-        (r.h3||[]).filter(v=>v!=="—").join(" | "),
-        (r.h4||[]).filter(v=>v!=="—").join(" | "),
-        (r.h5||[]).filter(v=>v!=="—").join(" | "),
-        (r.h6||[]).filter(v=>v!=="—").join(" | "),
-        r.url]
-        .map(v => `"${String(v).replace(/"/g,'""')}"`)
+      [r.rank,r.site_name,r.domain,...["h1","h2","h3","h4","h5","h6"].map(k=>(r[k]||[]).filter(v=>v!=="—").join(" | ")),r.url]
+        .map(v=>`"${String(v).replace(/"/g,'""')}"`)
         .join(",")
     );
-    return [headers.join(","), ...rows].join("\n");
+    return [h.join(","),...rows].join("\n");
   };
-
   const downloadCSV = () => {
-    if (!results.length) return;
-    const blob = new Blob([getCSVContent()], { type:"text/csv;charset=utf-8;" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `serp-${activeKeyword.replace(/\s+/g,"-")}-${country.label}.csv`;
-    a.click();
+    const b = new Blob([getCSV()],{type:"text/csv;charset=utf-8;"});
+    const a = document.createElement("a"); a.href = URL.createObjectURL(b);
+    a.download = `serp-${activeKeyword.replace(/\s+/g,"-")}.csv`; a.click();
   };
-
   const copyCSV = () => {
-    if (!results.length) return;
-    navigator.clipboard.writeText(getCSVContent());
-    setCopyMsg("Copied!"); setTimeout(() => setCopyMsg(""), 2000);
+    navigator.clipboard.writeText(getCSV());
+    setCopyMsg("Copied!"); setTimeout(()=>setCopyMsg(""),2000);
   };
 
-  // Ahrefs-style heading renderer
-  const headColor = { h1:"#a5b4fc", h2:"#67e8f9", h3:"#86efac", h4:"#fde68a", h5:"#f9a8d4", h6:"#c4b5fd" };
-  const headIndent = { h1:0, h2:16, h3:32, h4:48, h5:60, h6:72 };
+  const hColors = { h1:dark?"#b8a9f8":"#5b4db0", h2:dark?"#67d8f0":"#1a6090", h3:dark?"#6ee8b4":"#1a7a58", h4:dark?"#f0d070":"#8b6010", h5:dark?"#f0a0c0":"#8b1a4a", h6:dark?"#c4b0f8":"#6b4db0" };
+  const hIndent = { h1:0, h2:18, h3:36, h4:50, h5:62, h6:72 };
 
   const renderHeadings = (r) => {
-    if (!r.headingsLoaded) return <span style={{ color:"#334155", fontStyle:"italic", fontSize:12 }}>Loading...</span>;
+    if (!r.headingsLoaded) return <span style={{ color:T.textMuted, fontStyle:"italic", fontSize:12 }}>Loading...</span>;
     const rows = [];
     ["h1","h2","h3","h4","h5","h6"].forEach(hk => {
-      const items = (r[hk] || []).filter(v => v && v !== "—");
-      items.forEach((txt, idx) => {
+      (r[hk]||[]).filter(v=>v&&v!=="—").forEach((txt,idx)=>{
         rows.push(
-          <div key={`${hk}-${idx}`} style={{ display:"flex", alignItems:"baseline", gap:6, marginBottom:4, paddingLeft: headIndent[hk] }}>
-            <span style={{ fontSize:9, fontWeight:800, color:headColor[hk], background:`${headColor[hk]}18`, border:`1px solid ${headColor[hk]}40`, borderRadius:4, padding:"1px 5px", flexShrink:0, letterSpacing:"0.05em" }}>{hk.toUpperCase()}</span>
-            <span style={{ fontSize:12, color:"#cbd5e1", lineHeight:1.5 }}>{txt}</span>
+          <div key={`${hk}-${idx}`} style={{ display:"flex", alignItems:"baseline", gap:7, marginBottom:5, paddingLeft:hIndent[hk] }}>
+            <span style={{ fontSize:9, fontWeight:800, color:hColors[hk], background:`${hColors[hk]}18`, border:`1px solid ${hColors[hk]}35`, borderRadius:4, padding:"1px 5px", flexShrink:0, letterSpacing:"0.06em" }}>{hk.toUpperCase()}</span>
+            <span style={{ fontSize:12.5, color:T.text, lineHeight:1.55, opacity: hk==="h1"?1:0.85 }}>{txt}</span>
           </div>
         );
       });
     });
-    return rows.length > 0 ? rows : <span style={{ color:"#334155" }}>—</span>;
+    return rows.length > 0 ? rows : <span style={{ color:T.textMuted }}>—</span>;
   };
 
-  const rankBg = n => n <= 3 ? "linear-gradient(135deg,#6366f1,#8b5cf6)" : n <= 6 ? "linear-gradient(135deg,#0ea5e9,#2563eb)" : "#1e293b";
-  const cell = { padding:"10px 14px", fontSize:12, color:"#94a3b8", borderRight:"1px solid #1a2540", wordBreak:"break-word", lineHeight:1.5, verticalAlign:"top" };
-  const head = { padding:"10px 14px", fontSize:10, fontWeight:800, color:"#3b5068", textTransform:"uppercase", letterSpacing:"0.08em", borderRight:"1px solid #1a2540", background:"#080e1a", textAlign:"left" };
+  const rankBg = n => n<=3 ? T.rankTop : n<=6 ? T.rankMid : T.surface3;
+
+  const card = { background:T.surface, border:`1px solid ${T.border}`, borderRadius:20, boxShadow:`0 4px 24px ${T.shadow}`, transition:"all 0.3s ease" };
+  const input = { background:T.surface2, border:`1px solid ${T.border}`, color:T.text, borderRadius:14, outline:"none", transition:"border-color 0.25s, box-shadow 0.25s", fontFamily:"inherit" };
+  const btn = (active, variant="default") => ({
+    border:"none", borderRadius:12, fontWeight:700, cursor:"pointer", transition:"all 0.25s ease",
+    ...(variant==="primary" ? { background: active?"linear-gradient(135deg,#9b8afb,#c084fc)":T.surface2, color:active?"#fff":T.textSub, boxShadow:active?`0 4px 16px ${T.accentSub}40`:"none" }
+      : variant==="ghost" ? { background:"transparent", color:active?T.accent:T.textSub, borderBottom:active?`2px solid ${T.accent}`:"2px solid transparent" }
+      : { background:T.surface2, color:T.textSub, border:`1px solid ${T.border}` })
+  });
+
+  const thStyle = { padding:"11px 16px", fontSize:10, fontWeight:800, color:T.textMuted, textTransform:"uppercase", letterSpacing:"0.1em", background:T.surface, borderBottom:`2px solid ${T.border}`, textAlign:"left", whiteSpace:"nowrap" };
+  const tdStyle = { padding:"13px 16px", fontSize:12.5, color:T.textSub, borderBottom:`1px solid ${T.border}`, verticalAlign:"top", lineHeight:1.5 };
 
   return (
-    <div style={{ minHeight:"100vh", background:"#0f1117", color:"#e2e8f0", fontFamily:"'Inter',sans-serif", padding:"28px 16px" }}>
-      <div style={{ maxWidth:1400, margin:"0 auto" }}>
+    <div style={{ minHeight:"100vh", background:T.bg, color:T.text, fontFamily:"'Inter',system-ui,sans-serif", transition:"background 0.3s, color 0.3s" }}>
 
-        {/* Header */}
-        <div style={{ textAlign:"center", marginBottom:24 }}>
-          <div style={{ display:"inline-flex", alignItems:"center", gap:8, background:"#1e293b", border:"1px solid #22c55e40", borderRadius:50, padding:"5px 16px", marginBottom:12 }}>
-            <span style={{ width:7, height:7, borderRadius:"50%", background:"#22c55e", display:"inline-block", boxShadow:"0 0 6px #22c55e" }} />
-            <span style={{ fontSize:11, color:"#64748b", letterSpacing:"0.06em" }}>LIVE · SERPAPI · REAL GOOGLE DATA</span>
+      {/* Navbar */}
+      <nav style={{ position:"sticky", top:0, zIndex:100, background:dark?`${T.surface}ee`:`${T.surface}f0`, backdropFilter:"blur(20px)", borderBottom:`1px solid ${T.border}`, padding:"0 32px", display:"flex", alignItems:"center", justifyContent:"space-between", height:60 }}>
+        {/* Logo */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
+          <div style={{ width:30, height:30, borderRadius:10, background:"linear-gradient(135deg,#9b8afb,#c9a96e)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           </div>
-          <h1 style={{ fontSize:28, fontWeight:800, color:"#fff", margin:0, letterSpacing:"-0.5px" }}>SERP Research Tool</h1>
-          <p style={{ color:"#64748b", marginTop:6, fontSize:13 }}>Real Google rankings · H1–H6 extraction · Keyword analysis</p>
+          <span style={{ fontSize:15, fontWeight:800, color:T.text, letterSpacing:"-0.3px" }}>SERP Research</span>
         </div>
 
-        {/* API Key */}
-        <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:12, padding:"12px 20px", marginBottom:12, display:"flex", gap:12, alignItems:"center" }}>
-          <span style={{ fontSize:11, color:"#64748b", whiteSpace:"nowrap", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.05em" }}>API Key</span>
-          <input value={apiKey} onChange={e=>setApiKey(e.target.value)} type={showKey?"text":"password"} placeholder="Paste your SerpAPI key..."
-            style={{ flex:1, background:"transparent", border:"none", outline:"none", color:"#e2e8f0", fontSize:13, fontFamily:"monospace" }} />
-          <button onClick={()=>setShowKey(p=>!p)} style={{ background:"#0f172a", border:"1px solid #334155", borderRadius:7, padding:"5px 14px", color:"#94a3b8", fontSize:12, cursor:"pointer" }}>
-            {showKey?"Hide":"Show"}
-          </button>
-        </div>
-
-        {/* Search Row */}
-        <div style={{ display:"flex", gap:12, marginBottom:20 }}>
-          <div style={{ display:"flex", background:"#1e293b", border:"1px solid #334155", borderRadius:12, overflow:"hidden", flexShrink:0 }}>
-            {COUNTRIES.map(ct => (
-              <button key={ct.gl} onClick={()=>setCountry(ct)}
-                style={{ padding:"0 20px", height:"100%", border:"none", background:country.gl===ct.gl?"linear-gradient(135deg,#6366f1,#8b5cf6)":"transparent", color:country.gl===ct.gl?"#fff":"#64748b", fontWeight:700, fontSize:13, cursor:"pointer", transition:"all 0.2s" }}>
-                {ct.label}
-              </button>
-            ))}
-          </div>
-          <input value={keyword} onChange={e=>setKeyword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()}
-            placeholder="Enter keyword e.g. D2C Shopify Platforms"
-            style={{ flex:1, padding:"13px 20px", borderRadius:12, border:"1.5px solid #334155", background:"#1e293b", color:"#e2e8f0", fontSize:15, outline:"none", transition:"border-color 0.2s" }}
-            onFocus={e=>e.target.style.borderColor="#6366f1"} onBlur={e=>e.target.style.borderColor="#334155"} />
-          <button onClick={handleSearch} disabled={loading}
-            style={{ padding:"13px 32px", borderRadius:12, border:loading?"1px solid #334155":"none", background:loading?"#1e293b":"linear-gradient(135deg,#6366f1,#8b5cf6)", color:loading?"#64748b":"#fff", fontSize:15, fontWeight:700, cursor:loading?"not-allowed":"pointer", whiteSpace:"nowrap" }}>
-            {loading?"Fetching...":"Search"}
-          </button>
-        </div>
-
-        {error && <div style={{ background:"#450a0a", border:"1px solid #dc2626", borderRadius:10, padding:"12px 18px", marginBottom:16, color:"#fca5a5", fontSize:13 }}>{error}</div>}
-
-        {/* Tabs */}
-        <div style={{ display:"flex", gap:4, marginBottom:20, background:"#1e293b", borderRadius:12, padding:5, border:"1px solid #334155", width:"fit-content" }}>
-          {[["serp","SERP Scraper"],["sponsored","Sponsored"],["keywords","Keyword Analysis"]].map(([tab, label]) => (
-            <button key={tab} onClick={()=>setActiveTab(tab)}
-              style={{ padding:"9px 24px", borderRadius:9, border:"none", background:activeTab===tab?"linear-gradient(135deg,#6366f1,#8b5cf6)":"transparent", color:activeTab===tab?"#fff":"#64748b", fontWeight:700, fontSize:13, cursor:"pointer", transition:"all 0.2s" }}>
+        {/* Center Tabs */}
+        <div style={{ display:"flex", gap:2, background:T.surface2, borderRadius:14, padding:"4px", border:`1px solid ${T.border}` }}>
+          {[["serp","SERP Scraper"],["sponsored","Sponsored"],["keywords","Keyword Analysis"]].map(([tab,label])=>(
+            <button key={tab} onClick={()=>setActiveTab(tab)} style={{ ...btn(activeTab===tab,"primary"), padding:"7px 20px", fontSize:12.5, borderRadius:10, position:"relative" }}>
               {label}
-              {tab==="sponsored" && ads.length>0 && <span style={{ marginLeft:8, background:"#f59e0b", borderRadius:50, padding:"1px 7px", fontSize:10, color:"#fff", fontWeight:800 }}>{ads.length}</span>}
-              {tab==="keywords" && results.length>0 && <span style={{ marginLeft:8, background:"#22c55e", borderRadius:50, padding:"1px 7px", fontSize:10, color:"#fff", fontWeight:800 }}>{serpData?.related_searches?.length||0}</span>}
+              {tab==="sponsored"&&ads.length>0&&<span style={{ position:"absolute", top:-4, right:-4, background:T.accent, borderRadius:50, padding:"1px 6px", fontSize:9, color:"#fff", fontWeight:800 }}>{ads.length}</span>}
+              {tab==="keywords"&&results.length>0&&<span style={{ position:"absolute", top:-4, right:-4, background:T.accentGreen, borderRadius:50, padding:"1px 6px", fontSize:9, color:"#fff", fontWeight:800 }}>{serpData?.related_searches?.length||0}</span>}
             </button>
           ))}
+        </div>
+
+        {/* Right — Settings */}
+        <div style={{ position:"relative", flexShrink:0 }} data-settings>
+          <button onClick={()=>setSettingsOpen(p=>!p)}
+            style={{ ...btn(settingsOpen), width:38, height:38, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", background:settingsOpen?T.surface3:T.surface2 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.textSub} strokeWidth="2" strokeLinecap="round">
+              <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+
+          {/* Settings Panel */}
+          {settingsOpen && (
+            <div data-settings style={{ position:"absolute", top:48, right:0, background:T.surface, border:`1px solid ${T.border}`, borderRadius:18, padding:"20px", width:240, boxShadow:`0 16px 48px ${T.shadow}`, zIndex:200 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:T.textMuted, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:16 }}>Settings</div>
+              {/* Dark/Light Toggle */}
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 14px", background:T.surface2, borderRadius:12, border:`1px solid ${T.border}` }}>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:600, color:T.text }}>Appearance</div>
+                  <div style={{ fontSize:11, color:T.textMuted, marginTop:2 }}>{dark?"Dark mode":"Light mode"}</div>
+                </div>
+                <button onClick={()=>setDark(p=>!p)}
+                  style={{ width:48, height:26, borderRadius:50, border:"none", background:dark?"linear-gradient(135deg,#9b8afb,#c084fc)":T.border, cursor:"pointer", position:"relative", transition:"background 0.3s", padding:0 }}>
+                  <div style={{ width:20, height:20, borderRadius:"50%", background:"#fff", position:"absolute", top:3, left:dark?25:3, transition:"left 0.25s ease", boxShadow:"0 2px 6px rgba(0,0,0,0.2)" }} />
+                </button>
+              </div>
+              <div style={{ marginTop:12, padding:"10px 14px", background:T.surface2, borderRadius:12, border:`1px solid ${T.border}` }}>
+                <div style={{ fontSize:11, color:T.textMuted, marginBottom:6 }}>Proxy Status</div>
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <div style={{ width:6, height:6, borderRadius:"50%", background:T.accentGreen, boxShadow:`0 0 6px ${T.accentGreen}` }} />
+                  <span style={{ fontSize:11, color:T.text, fontFamily:"monospace" }}>serp-proxy-true.onrender.com</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </nav>
+
+      {/* Main Content */}
+      <main style={{ maxWidth:1400, margin:"0 auto", padding:"32px 24px" }}>
+
+        {/* Search Panel */}
+        <div style={{ ...card, padding:"24px", marginBottom:24 }}>
+          {/* API Key Row */}
+          <div style={{ display:"flex", gap:10, alignItems:"center", marginBottom:16, padding:"12px 16px", background:T.surface2, borderRadius:14, border:`1px solid ${T.border}` }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.accent} strokeWidth="2" strokeLinecap="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+            <span style={{ fontSize:11, color:T.accent, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", whiteSpace:"nowrap" }}>API Key</span>
+            <input value={apiKey} onChange={e=>setApiKey(e.target.value)} type={showKey?"text":"password"}
+              placeholder="Paste your SerpAPI key..."
+              style={{ ...input, flex:1, background:"transparent", border:"none", fontSize:13, fontFamily:"monospace", padding:0, color:T.text }} />
+            <button onClick={()=>setShowKey(p=>!p)} style={{ ...btn(false), padding:"5px 14px", fontSize:11, borderRadius:8, fontWeight:600 }}>
+              {showKey?"Hide":"Show"}
+            </button>
+          </div>
+
+          {/* Search Row */}
+          <div style={{ display:"flex", gap:10 }}>
+            {/* Country Toggle */}
+            <div style={{ display:"flex", background:T.surface2, border:`1px solid ${T.border}`, borderRadius:14, overflow:"hidden", flexShrink:0 }}>
+              {COUNTRIES.map(ct=>(
+                <button key={ct.gl} onClick={()=>setCountry(ct)}
+                  style={{ padding:"0 18px", height:50, border:"none", borderRadius:0, background:country.gl===ct.gl?"linear-gradient(135deg,#9b8afb,#c084fc)":"transparent", color:country.gl===ct.gl?"#fff":T.textSub, fontWeight:700, fontSize:13, cursor:"pointer", transition:"all 0.25s" }}>
+                  {ct.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Keyword Input */}
+            <input value={keyword} onChange={e=>setKeyword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()}
+              placeholder="Enter keyword e.g. D2C Shopify Platforms"
+              style={{ ...input, flex:1, padding:"14px 20px", fontSize:15 }}
+              onFocus={e=>{ e.target.style.borderColor=dark?"#9b8afb":"#5b4db0"; e.target.style.boxShadow=`0 0 0 3px ${dark?"#9b8afb":"#5b4db0"}18`; }}
+              onBlur={e=>{ e.target.style.borderColor=T.border; e.target.style.boxShadow="none"; }} />
+
+            {/* Search Button */}
+            <button onClick={handleSearch} disabled={loading}
+              style={{ padding:"14px 32px", borderRadius:14, border:"none", background:loading?T.surface2:"linear-gradient(135deg,#9b8afb,#c084fc)", color:loading?T.textMuted:"#fff", fontSize:15, fontWeight:700, cursor:loading?"not-allowed":"pointer", whiteSpace:"nowrap", boxShadow:loading?"none":"0 4px 20px #9b8afb40", transition:"all 0.25s" }}>
+              {loading?"Fetching...":"Search"}
+            </button>
+          </div>
+
+          {error && (
+            <div style={{ marginTop:14, padding:"12px 16px", background:dark?"#2a0f0f":"#fff0f0", border:"1px solid #dc262640", borderRadius:12, color:"#f87171", fontSize:13 }}>
+              {error}
+            </div>
+          )}
         </div>
 
         {/* SERP Tab */}
         {activeTab==="serp" && (
           <>
             {loading && (
-              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                 {[...Array(8)].map((_,i)=>(
-                  <div key={i} style={{ background:"#1e293b", borderRadius:10, padding:"16px 20px", opacity:1-i*0.08 }}>
-                    <div style={{ display:"flex", gap:16, alignItems:"center" }}>
-                      <div style={{ width:36, height:36, borderRadius:9, background:"#334155", flexShrink:0 }} />
+                  <div key={i} style={{ ...card, padding:"16px 20px", opacity:1-i*0.09 }}>
+                    <div style={{ display:"flex", gap:14, alignItems:"center" }}>
+                      <div style={{ width:36, height:36, borderRadius:10, background:T.surface2 }} />
                       <div style={{ flex:1 }}>
-                        <div style={{ height:13, background:"#334155", borderRadius:4, width:`${50+(i%3)*14}%`, marginBottom:9 }} />
-                        <div style={{ height:11, background:"#243044", borderRadius:4, width:`${28+(i%4)*9}%` }} />
+                        <div style={{ height:12, background:T.surface2, borderRadius:6, width:`${48+(i%3)*14}%`, marginBottom:8 }} />
+                        <div style={{ height:10, background:T.surface3, borderRadius:6, width:`${26+(i%4)*10}%` }} />
                       </div>
                     </div>
                   </div>
                 ))}
-                <div style={{ textAlign:"center", fontSize:12, color:"#475569", marginTop:6 }}>Fetching results from Google via SerpAPI...</div>
+                <div style={{ textAlign:"center", fontSize:12, color:T.textMuted, marginTop:4 }}>Fetching results from Google via SerpAPI...</div>
               </div>
             )}
 
             {!loading && results.length>0 && (
               <>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-                  <div style={{ fontSize:13, color:"#64748b", display:"flex", alignItems:"center", gap:10 }}>
-                    <span>Top <span style={{ color:"#a5b4fc", fontWeight:700 }}>{results.length}</span> for <span style={{ color:"#fff", fontWeight:600 }}>"{activeKeyword}"</span></span>
-                    <span style={{ background:country.gl==="us"?"#1e3a5f":"#1a2e1a", border:`1px solid ${country.gl==="us"?"#2563eb":"#22c55e"}`, borderRadius:6, padding:"2px 10px", fontSize:11, color:country.gl==="us"?"#7dd3fc":"#86efac", fontWeight:600 }}>{country.label}</span>
-                    {loadingHeadings && <span style={{ fontSize:11, color:"#f59e0b", background:"#1c1a0a", border:"1px solid #f59e0b40", borderRadius:6, padding:"2px 10px" }}>Loading H1–H6...</span>}
-                    {totalResults && <span style={{ color:"#334155", fontSize:12 }}>~{Number(totalResults).toLocaleString()} results</span>}
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+                    <span style={{ fontSize:13, color:T.textSub }}>
+                      Top <span style={{ color:T.accentSub, fontWeight:700 }}>{results.length}</span> for
+                      <span style={{ color:T.text, fontWeight:700 }}> "{activeKeyword}"</span>
+                    </span>
+                    <span style={{ background:country.gl==="us"?`${T.accentBlue}20`:`${T.accentGreen}20`, border:`1px solid ${country.gl==="us"?T.accentBlue:T.accentGreen}40`, borderRadius:8, padding:"3px 10px", fontSize:11, color:country.gl==="us"?T.accentBlue:T.accentGreen, fontWeight:600 }}>
+                      {country.label}
+                    </span>
+                    {loadingHeadings && (
+                      <span style={{ background:`${T.accent}18`, border:`1px solid ${T.accent}40`, borderRadius:8, padding:"3px 10px", fontSize:11, color:T.accent, fontWeight:600 }}>
+                        Loading H1–H6...
+                      </span>
+                    )}
+                    {totalResults && <span style={{ fontSize:12, color:T.textMuted }}>~{Number(totalResults).toLocaleString()} results</span>}
                   </div>
                   <div style={{ display:"flex", gap:8 }}>
-                    <button onClick={downloadCSV} style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:9, padding:"7px 16px", color:"#94a3b8", fontSize:12, cursor:"pointer", fontWeight:600 }}>Download CSV</button>
-                    <button onClick={copyCSV} style={{ background:copyMsg?"#0f2318":"#1e293b", border:`1px solid ${copyMsg?"#22c55e":"#334155"}`, borderRadius:9, padding:"7px 16px", color:copyMsg?"#22c55e":"#94a3b8", fontSize:12, cursor:"pointer", fontWeight:600, transition:"all 0.2s" }}>
+                    <button onClick={downloadCSV} style={{ ...btn(false), padding:"8px 16px", fontSize:12, borderRadius:10 }}>Download CSV</button>
+                    <button onClick={copyCSV} style={{ ...btn(false), padding:"8px 16px", fontSize:12, borderRadius:10, background:copyMsg?`${T.accentGreen}20`:T.surface2, color:copyMsg?T.accentGreen:T.textSub, border:`1px solid ${copyMsg?T.accentGreen:T.border}` }}>
                       {copyMsg||"Copy Sheet"}
                     </button>
                   </div>
                 </div>
 
-                <div style={{ overflowX:"auto", borderRadius:14, border:"1px solid #1e293b", boxShadow:"0 8px 32px rgba(0,0,0,0.4)" }}>
-                  <table style={{ width:"100%", borderCollapse:"collapse", minWidth:700 }}>
-                    <thead>
-                      <tr>
-                        <th style={{ ...head, width:56 }}>Rank</th>
-                        <th style={{ ...head, minWidth:140 }}>Site Name</th>
-                        <th style={{ ...head, minWidth:130 }}>Domain</th>
-                        <th style={{ ...head }}>Heading Structure</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {results.map((r,i)=>(
-                        <tr key={i} style={{ background:i%2===0?"#1e293b":"#18223a", transition:"background 0.15s" }}
-                          onMouseEnter={e=>e.currentTarget.style.background="#1e3155"}
-                          onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"#1e293b":"#18223a"}>
-                          <td style={{ ...cell, textAlign:"center", width:56 }}>
-                            <div style={{ width:36, height:36, borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center", background:rankBg(r.rank), fontWeight:800, fontSize:14, color:"#fff", margin:"0 auto", boxShadow:r.rank<=3?"0 2px 10px rgba(99,102,241,0.4)":"none" }}>{r.rank}</div>
-                          </td>
-                          <td style={{ ...cell, fontWeight:600, color:"#cbd5e1", minWidth:140 }}>
-                            <a href={r.url} target="_blank" rel="noopener noreferrer" style={{ color:"#cbd5e1", textDecoration:"none" }}
-                              onMouseEnter={e=>e.target.style.color="#a5b4fc"} onMouseLeave={e=>e.target.style.color="#cbd5e1"}>{r.site_name}</a>
-                            {r.date&&<div style={{ fontSize:10, color:"#3b5068", marginTop:3 }}>{r.date}</div>}
-                          </td>
-                          <td style={{ ...cell, minWidth:130 }}>
-                            <span style={{ background:"#0a1628", border:"1px solid #1e3a5f", borderRadius:6, padding:"3px 9px", fontSize:11, color:"#7dd3fc", fontFamily:"monospace" }}>{r.domain}</span>
-                          </td>
-                          <td style={{ ...cell, minWidth:300 }}>
-                            {renderHeadings(r)}
-                          </td>
+                {/* Table */}
+                <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, overflow:"hidden", boxShadow:`0 8px 32px ${T.shadow}` }}>
+                  <div style={{ overflowX:"auto" }}>
+                    <table style={{ width:"100%", borderCollapse:"collapse", minWidth:700 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ ...thStyle, width:60, textAlign:"center" }}>Rank</th>
+                          <th style={{ ...thStyle, minWidth:140 }}>Site Name</th>
+                          <th style={{ ...thStyle, minWidth:130 }}>Domain</th>
+                          <th style={{ ...thStyle }}>Heading Structure</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {results.map((r,i)=>(
+                          <tr key={i} style={{ background:i%2===0?T.surface:`${T.surface2}60`, transition:"background 0.2s" }}
+                            onMouseEnter={e=>e.currentTarget.style.background=`${T.accentSub}12`}
+                            onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:`${T.surface2}60`}>
+                            <td style={{ ...tdStyle, textAlign:"center", width:60 }}>
+                              <div style={{ width:36, height:36, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", background:rankBg(r.rank), fontWeight:800, fontSize:13, color:"#fff", margin:"0 auto", boxShadow:r.rank<=3?`0 3px 12px ${T.accentSub}50`:"none" }}>{r.rank}</div>
+                            </td>
+                            <td style={{ ...tdStyle, minWidth:140 }}>
+                              <a href={r.url} target="_blank" rel="noopener noreferrer" style={{ color:T.accentSub, fontWeight:600, textDecoration:"none", fontSize:13 }}
+                                onMouseEnter={e=>e.target.style.color=T.accent} onMouseLeave={e=>e.target.style.color=T.accentSub}>
+                                {r.site_name}
+                              </a>
+                              {r.date&&<div style={{ fontSize:10, color:T.textMuted, marginTop:3 }}>{r.date}</div>}
+                            </td>
+                            <td style={{ ...tdStyle, minWidth:130 }}>
+                              <span style={{ background:`${T.accentBlue}15`, border:`1px solid ${T.accentBlue}30`, borderRadius:7, padding:"3px 10px", fontSize:11, color:T.accentBlue, fontFamily:"monospace" }}>{r.domain}</span>
+                            </td>
+                            <td style={{ ...tdStyle, minWidth:320 }}>
+                              {renderHeadings(r)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </>
             )}
 
             {!loading&&!searched&&(
-              <div style={{ textAlign:"center", padding:"60px 20px" }}>
-                <div style={{ fontSize:15, color:"#475569", marginBottom:8, fontWeight:500 }}>Enter your SerpAPI key and a keyword to begin</div>
-                <div style={{ fontSize:12, color:"#2d3f55", marginBottom:24 }}>Scrapes top 12 Google results with H1 through H6 headings</div>
-                <div style={{ display:"inline-flex", gap:28, background:"#1e293b", border:"1px solid #1e3a5f", borderRadius:14, padding:"16px 32px" }}>
-                  {[["Real Rankings","Exact Google order"],["H1 to H6","All heading levels"],["USA & India","Country filter"],["CSV Export","One click export"]].map(([t,s])=>(
+              <div style={{ ...card, padding:"60px 32px", textAlign:"center" }}>
+                <div style={{ width:56, height:56, borderRadius:18, background:`linear-gradient(135deg,#9b8afb20,#c9a96e20)`, border:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 20px" }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={T.accent} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </div>
+                <div style={{ fontSize:16, color:T.text, marginBottom:8, fontWeight:600 }}>Enter a keyword to begin</div>
+                <div style={{ fontSize:13, color:T.textMuted, marginBottom:28 }}>Scrapes top 12 Google results with H1–H6 heading structure</div>
+                <div style={{ display:"inline-flex", gap:32, padding:"16px 32px", background:T.surface2, border:`1px solid ${T.border}`, borderRadius:16 }}>
+                  {[["Real Rankings","Exact Google order"],["H1 to H6","Ahrefs-style view"],["USA & India","Country filter"],["CSV Export","One click export"]].map(([t,s])=>(
                     <div key={t} style={{ textAlign:"center" }}>
-                      <div style={{ fontSize:13, fontWeight:700, color:"#e2e8f0", marginBottom:4 }}>{t}</div>
-                      <div style={{ fontSize:11, color:"#475569" }}>{s}</div>
+                      <div style={{ fontSize:13, fontWeight:700, color:T.text, marginBottom:4 }}>{t}</div>
+                      <div style={{ fontSize:11, color:T.textMuted }}>{s}</div>
                     </div>
                   ))}
                 </div>
@@ -347,49 +392,38 @@ export default function App() {
         {/* Sponsored Tab */}
         {activeTab==="sponsored" && (
           <div>
-            {!searched && (
-              <div style={{ textAlign:"center", padding:"60px 20px" }}>
-                <div style={{ fontSize:15, color:"#475569", fontWeight:500 }}>Search a keyword to see sponsored ads</div>
+            {!searched&&<div style={{ ...card, padding:"60px", textAlign:"center" }}><div style={{ fontSize:15, color:T.textMuted }}>Search a keyword to see sponsored ads</div></div>}
+            {searched&&ads.length===0&&!loading&&(
+              <div style={{ ...card, padding:"60px", textAlign:"center" }}>
+                <div style={{ fontSize:15, color:T.textMuted, fontWeight:500 }}>No sponsored ads found</div>
+                <div style={{ fontSize:12, color:T.textMuted, marginTop:6 }}>Try a commercial keyword like "buy CRM software"</div>
               </div>
             )}
-            {searched && ads.length===0 && !loading && (
-              <div style={{ textAlign:"center", padding:"60px 20px" }}>
-                <div style={{ fontSize:15, color:"#475569", fontWeight:500 }}>No sponsored ads found for this keyword</div>
-                <div style={{ fontSize:12, color:"#334155", marginTop:6 }}>Try a more commercial keyword like "buy CRM software"</div>
-              </div>
-            )}
-            {ads.length>0 && (
+            {ads.length>0&&(
               <>
-                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
-                  <span style={{ fontSize:13, color:"#64748b" }}>
-                    <span style={{ color:"#f59e0b", fontWeight:700 }}>{ads.length}</span> sponsored ads for <span style={{ color:"#fff", fontWeight:600 }}>"{activeKeyword}"</span>
-                  </span>
-                  <span style={{ background:"#1c1600", border:"1px solid #f59e0b40", borderRadius:6, padding:"2px 10px", fontSize:11, color:"#f59e0b", fontWeight:600 }}>Pages 1 & 2</span>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:18 }}>
+                  <span style={{ fontSize:13, color:T.textSub }}><span style={{ color:T.accent, fontWeight:700 }}>{ads.length}</span> sponsored ads for <span style={{ color:T.text, fontWeight:700 }}>"{activeKeyword}"</span></span>
+                  <span style={{ background:`${T.accent}18`, border:`1px solid ${T.accent}30`, borderRadius:8, padding:"2px 10px", fontSize:11, color:T.accent, fontWeight:600 }}>Pages 1 & 2</span>
                 </div>
                 <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
                   {ads.map((ad,i)=>(
-                    <div key={i} style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:12, padding:"16px 20px" }}
-                      onMouseEnter={e=>e.currentTarget.style.background="#1e3155"}
-                      onMouseLeave={e=>e.currentTarget.style.background="#1e293b"}>
-                      <div style={{ display:"flex", alignItems:"flex-start", gap:14 }}>
-                        <div style={{ width:32, height:32, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", background:"linear-gradient(135deg,#f59e0b,#d97706)", fontWeight:800, fontSize:13, color:"#fff", flexShrink:0 }}>{ad.rank}</div>
+                    <div key={i} style={{ ...card, padding:"18px 22px" }}
+                      onMouseEnter={e=>e.currentTarget.style.background=`${T.accentSub}10`}
+                      onMouseLeave={e=>e.currentTarget.style.background=T.surface}>
+                      <div style={{ display:"flex", gap:14, alignItems:"flex-start" }}>
+                        <div style={{ width:34, height:34, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", background:T.adGold, fontWeight:800, fontSize:13, color:"#fff", flexShrink:0 }}>{ad.rank}</div>
                         <div style={{ flex:1 }}>
-                          <a href={ad.url} target="_blank" rel="noopener noreferrer"
-                            style={{ color:"#a5b4fc", fontWeight:700, fontSize:14, textDecoration:"none", display:"block", marginBottom:3 }}
-                            onMouseEnter={e=>e.target.style.color="#c7d2fe"} onMouseLeave={e=>e.target.style.color="#a5b4fc"}>
-                            {ad.title}
-                          </a>
-                          <div style={{ fontSize:11, color:"#22c55e", fontFamily:"monospace", marginBottom:5 }}>{ad.displayed_url}</div>
-                          <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.6 }}>{ad.description}</div>
-                          {ad.sitelinks?.length>0 && (
-                            <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:8 }}>
-                              {ad.sitelinks.map((s,j)=>(
-                                <span key={j} style={{ background:"#0f172a", border:"1px solid #334155", borderRadius:6, padding:"3px 10px", fontSize:11, color:"#64748b" }}>{s}</span>
-                              ))}
+                          <a href={ad.url} target="_blank" rel="noopener noreferrer" style={{ color:T.accentSub, fontWeight:700, fontSize:14, textDecoration:"none", display:"block", marginBottom:3 }}
+                            onMouseEnter={e=>e.target.style.color=T.accent} onMouseLeave={e=>e.target.style.color=T.accentSub}>{ad.title}</a>
+                          <div style={{ fontSize:11, color:T.accentGreen, fontFamily:"monospace", marginBottom:6 }}>{ad.displayed_url}</div>
+                          <div style={{ fontSize:12, color:T.textSub, lineHeight:1.65 }}>{ad.description}</div>
+                          {ad.sitelinks?.length>0&&(
+                            <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:10 }}>
+                              {ad.sitelinks.map((s,j)=><span key={j} style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:8, padding:"3px 10px", fontSize:11, color:T.textMuted }}>{s}</span>)}
                             </div>
                           )}
                         </div>
-                        <span style={{ background:"#0a1628", border:"1px solid #1e3a5f", borderRadius:6, padding:"3px 9px", fontSize:11, color:"#7dd3fc", fontFamily:"monospace", flexShrink:0 }}>{ad.domain}</span>
+                        <span style={{ background:`${T.accentBlue}15`, border:`1px solid ${T.accentBlue}30`, borderRadius:8, padding:"3px 10px", fontSize:11, color:T.accentBlue, fontFamily:"monospace", flexShrink:0 }}>{ad.domain}</span>
                       </div>
                     </div>
                   ))}
@@ -400,20 +434,20 @@ export default function App() {
         )}
 
         {/* Keyword Tab */}
-        {activeTab==="keywords" && (
-          <KeywordPanel
-            keyword={activeKeyword}
-            country={country}
-            results={results}
-            serpData={serpData}
-            searched={searched}
-            loading={loading}
-            rawOrganic={results.map(r=>({ snippet:r.snippet, title:r.title }))}
-          />
+        {activeTab==="keywords"&&(
+          <KeywordPanel keyword={activeKeyword} country={country} results={results} serpData={serpData}
+            searched={searched} loading={loading} rawOrganic={results.map(r=>({snippet:r.snippet,title:r.title}))} theme={T} dark={dark} />
         )}
+      </main>
 
-      </div>
-      <style>{`*{box-sizing:border-box;}::-webkit-scrollbar{width:6px;height:6px;}::-webkit-scrollbar-track{background:#0f1117;}::-webkit-scrollbar-thumb{background:#334155;border-radius:3px;}::selection{background:#6366f1;color:#fff;}`}</style>
+      <style>{`
+        *{box-sizing:border-box;margin:0;padding:0;}
+        ::-webkit-scrollbar{width:6px;height:6px;}
+        ::-webkit-scrollbar-track{background:${T.bg};}
+        ::-webkit-scrollbar-thumb{background:${T.border};border-radius:4px;}
+        ::selection{background:${T.accentSub};color:#fff;}
+        body{background:${T.bg};transition:background 0.3s;}
+      `}</style>
     </div>
   );
 }
