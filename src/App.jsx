@@ -9,11 +9,15 @@ async function fetchHeadings(url, serpTitle) {
   const fallback = serpTitle ? [serpTitle] : ["—"];
   try {
     const res = await fetch(`${SCRAPER}?url=${encodeURIComponent(url)}`);
-    if (!res.ok) return { h1:fallback, h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"] };
+    if (!res.ok) return { h1:fallback, h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"], ordered:[] };
     const d = await res.json();
     const pick = (arr, fb) => Array.isArray(arr) && arr.length && arr[0] !== "—" ? arr : fb;
-    return { h1:pick(d.h1,fallback), h2:pick(d.h2,["—"]), h3:pick(d.h3,["—"]), h4:pick(d.h4,["—"]), h5:pick(d.h5,["—"]), h6:pick(d.h6,["—"]) };
-  } catch { return { h1:fallback, h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"] }; }
+    return {
+      h1:pick(d.h1,fallback), h2:pick(d.h2,["—"]), h3:pick(d.h3,["—"]),
+      h4:pick(d.h4,["—"]), h5:pick(d.h5,["—"]), h6:pick(d.h6,["—"]),
+      ordered: Array.isArray(d.ordered) ? d.ordered : [],
+    };
+  } catch { return { h1:fallback, h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"], ordered:[] }; }
 }
 
 const DARK = {
@@ -97,7 +101,7 @@ export default function App() {
         const link = item.link||""; let domain="";
         try { domain = new URL(link).hostname.replace("www.",""); } catch {}
         return { rank:i+1, h1:item.title?[item.title]:["—"], h2:["—"],h3:["—"],h4:["—"],h5:["—"],h6:["—"],
-          headingsLoaded:false, site_name:item.source||domain, domain:domain||"—",
+          ordered:[], headingsLoaded:false, site_name:item.source||domain, domain:domain||"—",
           url:link, title:item.title||"", date:item.date||null, snippet:item.snippet||"" };
       });
       setResults(mapped); setLoading(false); setLoadingHeadings(true);
@@ -138,23 +142,32 @@ export default function App() {
     setCopyMsg("Copied!"); setTimeout(()=>setCopyMsg(""),2000);
   };
 
-  const hColors = { h1:dark?"#b8a9f8":"#5b4db0", h2:dark?"#67d8f0":"#1a6090", h3:dark?"#6ee8b4":"#1a7a58", h4:dark?"#f0d070":"#8b6010", h5:dark?"#f0a0c0":"#8b1a4a", h6:dark?"#c4b0f8":"#6b4db0" };
-  const hIndent = { h1:0, h2:18, h3:36, h4:50, h5:62, h6:72 };
+  const hColors = { 1:dark?"#b8a9f8":"#5b4db0", 2:dark?"#67d8f0":"#1a6090", 3:dark?"#6ee8b4":"#1a7a58", 4:dark?"#f0d070":"#8b6010", 5:dark?"#f0a0c0":"#8b1a4a", 6:dark?"#c4b0f8":"#6b4db0" };
 
   const renderHeadings = (r) => {
     if (!r.headingsLoaded) return <span style={{ color:T.textMuted, fontStyle:"italic", fontSize:12 }}>Loading...</span>;
-    const rows = [];
-    ["h1","h2","h3","h4","h5","h6"].forEach(hk => {
-      (r[hk]||[]).filter(v=>v&&v!=="—").forEach((txt,idx)=>{
-        rows.push(
-          <div key={`${hk}-${idx}`} style={{ display:"flex", alignItems:"baseline", gap:7, marginBottom:5, paddingLeft:hIndent[hk] }}>
-            <span style={{ fontSize:9, fontWeight:800, color:hColors[hk], background:`${hColors[hk]}18`, border:`1px solid ${hColors[hk]}35`, borderRadius:4, padding:"1px 5px", flexShrink:0, letterSpacing:"0.06em" }}>{hk.toUpperCase()}</span>
-            <span style={{ fontSize:12.5, color:T.text, lineHeight:1.55, opacity: hk==="h1"?1:0.85 }}>{txt}</span>
-          </div>
-        );
-      });
-    });
-    return rows.length > 0 ? rows : <span style={{ color:T.textMuted }}>—</span>;
+
+    // Use ordered document-sequence if available (Ahrefs-style tree)
+    const ordered = r.ordered && r.ordered.length > 0 ? r.ordered : null;
+
+    if (ordered) {
+      return ordered.map((h, idx) => (
+        <div key={idx} style={{ display:"flex", alignItems:"baseline", gap:7, marginBottom:5, paddingLeft:(h.level-1)*18 }}>
+          <span style={{ fontSize:9, fontWeight:800, color:hColors[h.level], background:`${hColors[h.level]}18`, border:`1px solid ${hColors[h.level]}35`, borderRadius:4, padding:"1px 5px", flexShrink:0, letterSpacing:"0.06em" }}>H{h.level}</span>
+          <span style={{ fontSize:12.5, color:T.text, lineHeight:1.55, opacity:h.level===1?1:0.9-h.level*0.05 }}>{h.text}</span>
+        </div>
+      ));
+    }
+
+    // Fallback: grouped display using h1 title only
+    const h1 = (r.h1||[]).filter(v=>v&&v!=="—");
+    if (!h1.length) return <span style={{ color:T.textMuted }}>—</span>;
+    return h1.map((txt,idx)=>(
+      <div key={idx} style={{ display:"flex", alignItems:"baseline", gap:7, marginBottom:5 }}>
+        <span style={{ fontSize:9, fontWeight:800, color:hColors[1], background:`${hColors[1]}18`, border:`1px solid ${hColors[1]}35`, borderRadius:4, padding:"1px 5px", flexShrink:0 }}>H1</span>
+        <span style={{ fontSize:12.5, color:T.text, lineHeight:1.55 }}>{txt}</span>
+      </div>
+    ));
   };
 
   const rankBg = n => n<=3 ? T.rankTop : n<=6 ? T.rankMid : T.surface3;
