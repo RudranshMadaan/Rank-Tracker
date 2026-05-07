@@ -9,13 +9,14 @@
     "dev": "react-scripts start"
   },
   "dependencies": {
+    "@sparticuz/chromium-min": "^130.0.0",
     "cheerio": "^1.0.0",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "node-fetch": "^2.7.0",
+    "puppeteer-core": "^23.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.22.0",
     "react-scripts": "5.0.1"
   },
   "browserslist": {
