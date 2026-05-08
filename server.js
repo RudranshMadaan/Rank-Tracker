@@ -29,8 +29,9 @@ app.get("/serp", async (req, res) => {
   }
 });
 
-// --- Shared heading extractor from parsed DOM (used by both Cheerio and Puppeteer) ---
-function extractFromScope($, $scope) {
+// --- Shared heading + metadata extractor ---
+function extractFromScope($, $scope, $full) {
+  // Headings grouped
   const result = {};
   for (let i = 1; i <= 6; i++) {
     const texts = [];
@@ -41,6 +42,8 @@ function extractFromScope($, $scope) {
     });
     result[`h${i}`] = texts.length > 0 ? texts : ["—"];
   }
+
+  // Ordered document-sequence headings
   const ordered = [];
   $scope.find("h1,h2,h3,h4,h5,h6").each((_, el) => {
     const level = parseInt(el.tagName.toLowerCase().replace("h", ""));
@@ -49,6 +52,30 @@ function extractFromScope($, $scope) {
       ordered.push({ level, text });
   });
   result.ordered = ordered;
+
+  // Meta title
+  result.meta_title = $full("title").first().text().replace(/\s+/g, " ").trim() || "—";
+
+  // Meta description
+  result.meta_description =
+    $full('meta[name="description"]').attr("content") ||
+    $full('meta[property="og:description"]').attr("content") ||
+    "—";
+
+  // URL slug — passed in separately, stored client-side
+  // Word count from body content
+  const bodyText = $scope.text().replace(/\s+/g, " ").trim();
+  const wordCount = bodyText.split(/\s+/).filter(w => w.length > 0).length;
+  result.word_count = wordCount;
+
+  // Body paragraphs — top 20 meaningful ones for keyword extraction
+  const paragraphs = [];
+  $scope.find("p").each((_, el) => {
+    const text = $(el).text().replace(/\s+/g, " ").trim();
+    if (text.length > 40 && text.length < 1000) paragraphs.push(text);
+  });
+  result.paragraphs = paragraphs.slice(0, 20);
+
   return result;
 }
 
@@ -65,6 +92,7 @@ async function scrapeWithCheerio(url) {
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const html = await response.text();
   const $ = cheerio.load(html);
+  const $full = $; // keep full doc reference for meta tags
   $("nav,header,footer,aside,script,style,noscript,iframe").remove();
   $("[class*='nav'],[class*='menu'],[class*='footer'],[class*='header'],[class*='sidebar'],[id*='nav'],[id*='footer'],[id*='header'],[id*='menu']").remove();
   const contentAreas = ["main","article","[role='main']",".content","#content",".post",".entry","section"];
@@ -72,7 +100,7 @@ async function scrapeWithCheerio(url) {
   for (const sel of contentAreas) {
     if ($(sel).length > 0) { $content = $(sel).first(); break; }
   }
-  return extractFromScope($, $content || $("body"));
+  return extractFromScope($, $content || $("body"), $full);
 }
 
 // --- Check if result has actual content ---
@@ -128,7 +156,6 @@ async function scrapeWithPuppeteer(url) {
     await new Promise(r => setTimeout(r, 2500));
 
     const data = await page.evaluate(() => {
-      // Remove noise
       ["nav","header","footer","aside","script","style"].forEach(tag =>
         document.querySelectorAll(tag).forEach(el => el.remove())
       );
@@ -136,7 +163,6 @@ async function scrapeWithPuppeteer(url) {
         document.querySelectorAll(`[class*="${cls}"],[id*="${cls}"]`).forEach(el => el.remove());
       });
 
-      // Find main content area
       const scope =
         document.querySelector("main") ||
         document.querySelector("[role='main']") ||
@@ -145,6 +171,7 @@ async function scrapeWithPuppeteer(url) {
         document.querySelector("#content") ||
         document.body;
 
+      // Grouped headings
       const result = {};
       for (let i = 1; i <= 6; i++) {
         const texts = [];
@@ -155,7 +182,7 @@ async function scrapeWithPuppeteer(url) {
         result[`h${i}`] = texts.length ? texts : ["—"];
       }
 
-      // Ordered document-sequence headings
+      // Ordered headings
       const ordered = [];
       scope.querySelectorAll("h1,h2,h3,h4,h5,h6").forEach(el => {
         const level = parseInt(el.tagName.replace("H", ""));
@@ -163,6 +190,26 @@ async function scrapeWithPuppeteer(url) {
         if (text && text.length > 2 && text.length < 250) ordered.push({ level, text });
       });
       result.ordered = ordered;
+
+      // Meta title + description
+      result.meta_title = document.title?.replace(/\s+/g, " ").trim() || "—";
+      result.meta_description =
+        document.querySelector('meta[name="description"]')?.getAttribute("content") ||
+        document.querySelector('meta[property="og:description"]')?.getAttribute("content") ||
+        "—";
+
+      // Word count
+      const bodyText = scope.textContent.replace(/\s+/g, " ").trim();
+      result.word_count = bodyText.split(/\s+/).filter(w => w.length > 0).length;
+
+      // Body paragraphs — top 20 meaningful ones
+      const paragraphs = [];
+      scope.querySelectorAll("p").forEach(el => {
+        const t = el.textContent.replace(/\s+/g, " ").trim();
+        if (t.length > 40 && t.length < 1000) paragraphs.push(t);
+      });
+      result.paragraphs = paragraphs.slice(0, 20);
+
       return result;
     });
 
