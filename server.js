@@ -79,7 +79,6 @@ function extractFromScope($, $scope, $full) {
   return result;
 }
 
-// --- Cheerio scraper (fast, works for server-rendered sites) ---
 async function scrapeWithCheerio(url) {
   const response = await fetch(url, {
     headers: {
@@ -92,22 +91,62 @@ async function scrapeWithCheerio(url) {
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const html = await response.text();
   const $ = cheerio.load(html);
-  const $full = $; // keep full doc reference for meta tags
-  $("nav,header,footer,aside,script,style,noscript,iframe").remove();
-  $("[class*='nav'],[class*='menu'],[class*='footer'],[class*='header'],[class*='sidebar'],[id*='nav'],[id*='footer'],[id*='header'],[id*='menu']").remove();
-  const contentAreas = ["main","article","[role='main']",".content","#content",".post",".entry","section"];
-  let $content = null;
-  for (const sel of contentAreas) {
-    if ($(sel).length > 0) { $content = $(sel).first(); break; }
+  const $full = $;
+
+  // Remove noise — but keep a clean copy first for meta tags
+  $("script,style,noscript,iframe").remove();
+  $("[class*='cookie'],[class*='banner'],[class*='popup'],[class*='modal'],[class*='chat'],[class*='newsletter']").remove();
+
+  // Soft remove nav/header/footer — only elements that contain NO headings
+  ["nav","header","footer","aside"].forEach(tag => {
+    $(tag).each((_, el) => {
+      const headingsInside = $(el).find("h1,h2,h3,h4,h5,h6").length;
+      if (headingsInside === 0) $(el).remove();
+    });
+  });
+
+  // Remove nav-like classes only if they have no heading content
+  ["nav","menu","sidebar"].forEach(cls => {
+    $(`[class*='${cls}'],[id*='${cls}']`).each((_, el) => {
+      if ($(el).find("h1,h2,h3,h4,h5,h6").length === 0) $(el).remove();
+    });
+  });
+
+  // Try ALL content selectors — pick the one with MOST headings
+  const contentSelectors = [
+    "main", "article", "[role='main']",
+    ".content", "#content", ".main-content", "#main-content",
+    ".page-content", "#page-content", ".entry-content",
+    ".post-content", ".site-content", "#site-content",
+    ".container", "#container", ".wrapper", "#wrapper",
+    "section", "body"
+  ];
+
+  let bestScope = $("body");
+  let bestCount = 0;
+
+  for (const sel of contentSelectors) {
+    const el = $(sel).first();
+    if (!el.length) continue;
+    const count = el.find("h1,h2,h3,h4,h5,h6").length;
+    if (count > bestCount) {
+      bestCount = count;
+      bestScope = el;
+      // Stop early if we found something with 10+ headings
+      if (count >= 10) break;
+    }
   }
-  return extractFromScope($, $content || $("body"), $full);
+
+  return extractFromScope($, bestScope, $full);
 }
 
-// --- Check if result has actual content ---
+// --- Check if result has MEANINGFUL content (not just H1) ---
 function hasContent(result) {
-  return ["h1","h2","h3","h4","h5","h6"].some(k =>
-    result[k] && result[k].length > 0 && result[k][0] !== "—"
-  ) && (result.ordered || []).length > 0;
+  const totalHeadings = ["h2","h3","h4","h5","h6"]
+    .reduce((sum, k) => sum + (result[k]?.filter(v => v !== "—").length || 0), 0);
+  const orderedDepth = (result.ordered || []).length;
+  // Require at least 3 headings below H1, or 5+ total ordered headings
+  return totalHeadings >= 3 || orderedDepth >= 5;
 }
 
 // --- Puppeteer scraper (for JS-rendered sites like React/Next.js) ---
@@ -163,13 +202,21 @@ async function scrapeWithPuppeteer(url) {
         document.querySelectorAll(`[class*="${cls}"],[id*="${cls}"]`).forEach(el => el.remove());
       });
 
-      const scope =
-        document.querySelector("main") ||
-        document.querySelector("[role='main']") ||
-        document.querySelector("article") ||
-        document.querySelector(".content") ||
-        document.querySelector("#content") ||
-        document.body;
+      // Find scope with MOST headings
+      const selectors = [
+        "main","article","[role='main']",".content","#content",
+        ".main-content","#main-content",".page-content",".entry-content",
+        ".post-content",".container","#container",".wrapper","body"
+      ];
+      let scope = document.body;
+      let maxH = 0;
+      for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const count = el.querySelectorAll("h1,h2,h3,h4,h5,h6").length;
+        if (count > maxH) { maxH = count; scope = el; }
+        if (count >= 10) break;
+      }
 
       // Grouped headings
       const result = {};
