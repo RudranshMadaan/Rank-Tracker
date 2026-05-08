@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import KeywordPanel from "./KeywordPanel";
+import RankIntelligence from "./RankIntelligence";
 
 const PROXY = process.env.REACT_APP_PROXY_URL || "https://serp-proxy-true.onrender.com/serp";
 const SCRAPER = process.env.REACT_APP_SCRAPER_URL || "https://serp-proxy-true.onrender.com/scrape-headings";
@@ -444,6 +445,21 @@ export default function App() {
               </>
             )}
           </div>
+        )}
+
+        {/* Rank Intelligence Tab */}
+        {activeTab==="intelligence" && (
+          <RankIntelligence
+            results={results}
+            serpData={serpData}
+            keyword={activeKeyword}
+            apiKey={apiKey}
+            country={country}
+            searched={searched}
+            loading={loading}
+            theme={T}
+            dark={dark}
+          />
         )}
 
         {/* Keyword Tab */}
