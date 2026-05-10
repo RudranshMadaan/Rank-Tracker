@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import KeywordPanel from "./KeywordPanel";
+import AdKeywords from "./AdKeywords";
 import RankIntelligence from "./RankIntelligence";
 
 const PROXY = process.env.REACT_APP_PROXY_URL || "https://serp-proxy-true.onrender.com/serp";
@@ -447,6 +448,18 @@ export default function App() {
           </div>
         )}
 
+        {/* Ad Keywords Tab */}
+        {activeTab==="adkeywords"&&(
+          <AdKeywords
+            keyword={activeKeyword}
+            ads={ads}
+            searched={searched}
+            loading={loading}
+            theme={T}
+            dark={dark}
+          />
+        )}
+
         {/* Rank Intelligence Tab */}
         {activeTab==="intelligence" && (
           <RankIntelligence
@@ -462,7 +475,7 @@ export default function App() {
           />
         )}
 
-        {/* Keyword Tab */}
+        {/* Page Keywords Tab */}
         {activeTab==="keywords"&&(
           <KeywordPanel keyword={activeKeyword} country={country} results={results} serpData={serpData}
             searched={searched} loading={loading} rawOrganic={results.map(r=>({snippet:r.snippet,title:r.title}))} theme={T} dark={dark} />
