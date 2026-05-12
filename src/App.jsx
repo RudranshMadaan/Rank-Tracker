@@ -201,7 +201,7 @@ export default function App() {
 
         {/* Center Tabs */}
         <div style={{ display:"flex", gap:2, background:T.surface2, borderRadius:14, padding:"4px", border:`1px solid ${T.border}` }}>
-          {[["serp","SERP Scraper"],["sponsored","Sponsored"],["keywords","Keyword Analysis"]].map(([tab,label])=>(
+          {[["serp","SERP Scraper"],["sponsored","Sponsored"],["keywords","Keyword Analysis"],["adkeywords","Ad Keywords"],["intelligence","Rank Intelligence"]].map(([tab,label])=>(
             <button key={tab} onClick={()=>setActiveTab(tab)} style={{ ...btn(activeTab===tab,"primary"), padding:"7px 20px", fontSize:12.5, borderRadius:10, position:"relative" }}>
               {label}
               {tab==="sponsored"&&ads.length>0&&<span style={{ position:"absolute", top:-4, right:-4, background:T.accent, borderRadius:50, padding:"1px 6px", fontSize:9, color:"#fff", fontWeight:800 }}>{ads.length}</span>}
